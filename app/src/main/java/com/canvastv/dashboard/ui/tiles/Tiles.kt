@@ -289,7 +289,13 @@ private fun StatsTile(tile: Tile) {
         StatRow("Memory", "${s.ramUsedPct}% of ${"%.1f".format(s.ramTotalGb)} GB", s.ramUsedPct / 100f)
         val usedFrac = if (s.storageTotalGb > 0) 1 - s.storageFreeGb / s.storageTotalGb else 0f
         StatRow("Storage", "${"%.1f".format(s.storageFreeGb)} GB free", usedFrac)
-        Text("Network  ↓ ${fmtRate(s.downKbps)}  ↑ ${fmtRate(s.upKbps)}", fontSize = 13.sp, color = p.onSurface, maxLines = 1)
+        Row(Modifier.fillMaxWidth()) {
+            Text("Network", fontSize = 13.sp, color = p.onSurface, maxLines = 1)
+            Spacer(Modifier.weight(1f))
+            Text("↓ ${fmtRate(s.downKbps)}", fontSize = 13.sp, color = p.muted, maxLines = 1)
+            Spacer(Modifier.size(8.dp))
+            Text("↑ ${fmtRate(s.upKbps)}", fontSize = 13.sp, color = p.muted, maxLines = 1)
+        }
         if (tile.h >= 2) {
             Text("IP ${s.ip}", fontSize = 12.sp, color = p.muted, maxLines = 1)
             Text("Up ${s.uptime}", fontSize = 12.sp, color = p.muted, maxLines = 1)

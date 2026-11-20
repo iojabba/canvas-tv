@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -177,6 +179,17 @@ private fun TextRow(label: String, initial: String, hint: String = "", onDone: (
     }
 }
 
+/**
+ * Settings and Configure use a plain scrolling Column (every row stays composed), so the
+ * highlight stays on its row when a change re-lays out the screen, such as a new text size.
+ * These keep the list-style item { } blocks readable there.
+ */
+@Composable
+private fun item(content: @Composable () -> Unit) = content()
+
+@Composable
+private fun <T> items(list: List<T>, content: @Composable (T) -> Unit) = list.forEach { content(it) }
+
 private fun <T> List<T>.after(current: T): T = this[(indexOf(current) + 1).mod(size)]
 
 // ---------------------------------------------------------------- tile actions
@@ -197,7 +210,8 @@ fun TileActionsDialog(
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     var confirmDelete by remember { mutableStateOf(false) }
-    Panel(tile.type.label, onDismiss) {
+    val ctx = LocalContext.current
+    Panel(tileTitle(ctx, tile), onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (tile.type in OPENABLE) ActionButton("Open", Modifier.focusRequester(first), primary = true, onClick = onOpen)
             ActionButton("Move", if (tile.type in OPENABLE) Modifier else Modifier.focusRequester(first), onClick = onMove)
@@ -208,6 +222,19 @@ fun TileActionsDialog(
         }
     }
 }
+
+/** A tile's name as a person would say it: the app, input, note or feed rather than its type. */
+fun tileTitle(ctx: android.content.Context, t: Tile): String = when (t.type) {
+    TileType.APP -> t.cfg("label").ifBlank { Apps.label(ctx, t.cfg("pkg")) }
+    TileType.HDMI -> t.cfg("label", "HDMI input")
+    TileType.NOTE -> t.cfg("text").take(40).ifBlank { "Note" }
+    TileType.VIDEO, TileType.WEB, TileType.NEWS, TileType.CALENDAR -> t.cfg("title").ifBlank { t.type.label }
+    TileType.FOLDER -> t.cfg("name").ifBlank { "Folder" }
+    TileType.COUNTDOWN -> t.cfg("label").ifBlank { "Countdown" }
+    TileType.WEATHER -> t.cfg("place").ifBlank { "Weather" }
+    TileType.CLOCK -> t.cfg("city").ifBlank { "Clock" }
+    else -> t.type.label
+}.let { if (it == t.type.label) it else "$it · ${t.type.label}" }
 
 // ---------------------------------------------------------------- add tile
 
@@ -272,7 +299,7 @@ fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> U
     fun set(k: String, v: String) = onChange(tile.withCfg(k, v))
     fun yesNo(b: Boolean) = if (b) "On" else "Off"
     Panel("Configure ${tile.type.label.lowercase()}", onDismiss, wide = true) {
-        LazyColumn {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
             item { SectionLabel("Content") }
             when (tile.type) {
                 TileType.CLOCK -> {
@@ -457,7 +484,7 @@ fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
     fun bg(block: (Background) -> Background) = theme { it.copy(background = block(it.background)) }
 
     Panel("Settings", onDismiss, wide = true) {
-        LazyColumn {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
             item { SectionLabel("Theme") }
             item { CycleRow("Mode", t.mode.label, { theme { it.copy(mode = ThemeMode.entries.after(it.mode)) } }, Modifier.focusRequester(first)) }
             item { CycleRow("Accent color", t.accentHex, { theme { it.copy(accentHex = AccentChoices.after(it.accentHex.takeIf { h -> h in AccentChoices } ?: AccentChoices[0])) } }) }

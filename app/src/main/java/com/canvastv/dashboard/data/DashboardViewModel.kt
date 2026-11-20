@@ -44,6 +44,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     var dashboard: Dashboard
         get() = shared.value
         private set(v) { shared.value = v }
+
+    init {
+        // Write the starting layout right away, so a fresh install doesn't rebuild the preset
+        // (in a different order) on every launch until the first edit.
+        if (!file.exists()) scheduleSave()
+    }
     var pageIndex by mutableStateOf(0)
     var editing by mutableStateOf(false)
     var activeEdit by mutableStateOf<ActiveEdit?>(null)
@@ -252,19 +258,28 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             ?: run { message = "No room on this page. Delete or shrink a tile, or add a page."; return false }
         val w = if (page.freeSpot(type.defaultW, type.defaultH, d) != null) type.defaultW else 1
         val h = if (w == type.defaultW) type.defaultH else 1
-        updatePage { it.copy(tiles = it.tiles + Tile(type = type, x = spot.first, y = spot.second, w = w, h = h, config = config)) }
+        val t = Tile(type = type, x = spot.first, y = spot.second, w = w, h = h, config = config)
+        updatePage { it.copy(tiles = it.tiles + t) }
+        lastFocusedTileId = t.id // the highlight lands on the new tile
         return true
     }
 
     fun replaceTile(t: Tile) = updatePage { p -> p.copy(tiles = p.tiles.map { if (it.id == t.id) t else it }) }
 
-    fun deleteTile(id: String) = updatePage { p -> p.copy(tiles = p.tiles.filterNot { it.id == id }) }
+    fun deleteTile(id: String) {
+        val gone = tile(id)
+        updatePage { p -> p.copy(tiles = p.tiles.filterNot { it.id == id }) }
+        // Move the highlight to the nearest remaining tile rather than back to the top bar.
+        lastFocusedTileId = gone?.let { g -> page.tiles.minByOrNull { (it.x - g.x) * (it.x - g.x) + (it.y - g.y) * (it.y - g.y) }?.id }
+    }
 
     fun duplicateTile(id: String) {
         val t = tile(id) ?: return
         val spot = page.freeSpot(t.w, t.h, dashboard)
             ?: run { message = "No room for a copy on this page"; return }
-        updatePage { it.copy(tiles = it.tiles + t.copy(id = newId(), x = spot.first, y = spot.second)) }
+        val copy = t.copy(id = newId(), x = spot.first, y = spot.second)
+        updatePage { it.copy(tiles = it.tiles + copy) }
+        lastFocusedTileId = copy.id
     }
 
     /** Moves or resizes the active tile by one cell. Blocked moves are ignored. */

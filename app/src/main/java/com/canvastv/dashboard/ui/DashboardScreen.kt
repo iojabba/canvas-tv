@@ -355,9 +355,10 @@ private fun TileFrame(
     ) {
         TileContent(tile, cellHeightDp, liveVideo = !lightweight, hiddenApps = hiddenApps)
         if (editing) {
+            // Small tiles show just the size, and the badge never wraps at large text sizes.
             Text(
-                "${tile.type.label} · ${tile.w}×${tile.h}",
-                fontSize = 11.sp, color = Color.White,
+                if (tile.w >= 3) "${tile.type.label} · ${tile.w}×${tile.h}" else "${tile.w}×${tile.h}",
+                fontSize = 11.sp, color = Color.White, maxLines = 1, softWrap = false,
                 modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
                     .background(Color(0xAA000000), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
             )
