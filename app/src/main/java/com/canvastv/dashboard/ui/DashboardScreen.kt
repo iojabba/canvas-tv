@@ -224,6 +224,7 @@ fun DashboardScreen(vm: DashboardViewModel) {
             )
         }
         vm.message?.let { Hint(it, Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp)) }
+        com.canvastv.dashboard.data.Messages.banner?.let { m -> MessageBanner(m, Modifier.align(Alignment.TopEnd).padding(top = 72.dp, end = 32.dp)) }
     }
 
     when (val dl = dialog) {
@@ -380,6 +381,7 @@ private fun describeTile(ctx: android.content.Context, t: Tile): String = when (
     TileType.FOLDER -> "Folder ${t.cfg("name")}. Press OK to open"
     TileType.WEATHER -> "Weather for ${t.cfg("place")}"
     TileType.NEWS -> "News headlines"
+    TileType.MESSAGES -> "Message board"
     TileType.TICKER -> "Stock and crypto prices"
     TileType.CALENDAR -> "Calendar"
     TileType.PHOTOS -> "Photo slideshow"
@@ -471,6 +473,20 @@ private fun EmptyPageHint(onAdd: () -> Unit) {
         Text("This page is empty", fontSize = 22.sp)
         Spacer(Modifier.size(12.dp))
         AppButton(onClick = onAdd) { Text("+ Add a tile") }
+    }
+}
+
+/** A message from a phone or a web command, shown for 20 seconds. */
+@Composable
+private fun MessageBanner(m: com.canvastv.dashboard.data.TvMessage, modifier: Modifier) {
+    val p = LocalPalette.current
+    LaunchedEffect(m) { delay(20_000); if (com.canvastv.dashboard.data.Messages.banner == m) com.canvastv.dashboard.data.Messages.banner = null }
+    Column(
+        modifier.width(460.dp).background(Color(0xEE10161E), RoundedCornerShape(16.dp))
+            .border(2.dp, p.accent, RoundedCornerShape(16.dp)).padding(18.dp),
+    ) {
+        Text(if (m.from.isBlank()) "Message" else "Message from ${m.from}", fontSize = 14.sp, color = p.accent)
+        Text(m.text, fontSize = 24.sp, color = Color.White)
     }
 }
 

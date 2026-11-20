@@ -86,6 +86,7 @@ fun TileContent(tile: Tile, cellHeightDp: Float, liveVideo: Boolean, hiddenApps:
         TileType.COUNTDOWN -> CountdownTile(tile, cellHeightDp)
         TileType.FOLDER -> FolderTile(tile)
         TileType.WEATHER -> WeatherTile(tile, cellHeightDp)
+        TileType.MESSAGES -> MessagesTile(tile)
         TileType.NEWS -> NewsTile(tile)
         TileType.TICKER -> TickerTile(tile)
         TileType.CALENDAR -> CalendarTile(tile)

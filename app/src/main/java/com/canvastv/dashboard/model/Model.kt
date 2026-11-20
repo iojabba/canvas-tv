@@ -18,6 +18,8 @@ data class Dashboard(
     val lightweight: Boolean = false,
     /** SHA-256 of the edit-lock PIN, or null when edit mode is unlocked. */
     val pinHash: String? = null,
+    /** Lets phones on the same Wi-Fi open the setup page (after pairing with a code). */
+    val phoneSetup: Boolean = false,
     val theme: ThemeSpec = ThemeSpec(),
     val apps: AppPrefs = AppPrefs(),
     val pages: List<Page> = listOf(Page(name = "Home")),
@@ -68,6 +70,7 @@ enum class TileType(val label: String, val defaultW: Int, val defaultH: Int) {
     PHOTOS("Photo slideshow", 4, 3),
     WEB("Web page", 4, 3),
     SPEEDTEST("Speed test", 3, 2),
+    MESSAGES("Message board", 4, 2),
 }
 
 /** How the app drawer lists apps, which ones it hides, and which were opened recently. */

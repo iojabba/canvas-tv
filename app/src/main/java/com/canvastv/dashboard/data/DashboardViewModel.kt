@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -29,7 +30,7 @@ enum class EditMode { MOVE, RESIZE }
 
 data class ActiveEdit(val tileId: String, val mode: EditMode)
 
-class DashboardViewModel(app: Application) : AndroidViewModel(app) {
+class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
     private val file = File(app.filesDir, "dashboard.json")
 
@@ -44,6 +45,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     var dashboard: Dashboard
         get() = shared.value
         private set(v) { shared.value = v }
+
+    init {
+        CompanionServer.attach(this)
+        if (dashboard.phoneSetup) CompanionServer.start(app)
+        Messages.load(app)
+    }
 
     init {
         // Write the starting layout right away, so a fresh install doesn't rebuild the preset
@@ -292,6 +299,76 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (page.canPlace(moved, dashboard)) replaceTile(moved)
     }
+
+    // ------------------------------------------------------------ phone setup (CompanionApi)
+
+    fun setPhoneSetup(on: Boolean) {
+        update { it.copy(phoneSetup = on) }
+        if (on) CompanionServer.start(getApplication()) else CompanionServer.stop()
+    }
+
+    private val webJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    /** The layout as the phone sees it: the PIN hash never leaves the TV. */
+    override fun layoutJson(): String = webJson.encodeToString(Dashboard.serializer(), dashboard.copy(pinHash = null))
+
+    override fun replaceLayoutJson(text: String): String? {
+        val d = decode(text) ?: return "That isn't a Canvas TV layout"
+        restore(d, "from a phone")
+        return null
+    }
+
+    private fun pageAt(i: Int) = dashboard.pages.getOrNull(i)
+
+    private fun updatePageAt(i: Int, block: (Page) -> Page) = update { d ->
+        d.copy(pages = d.pages.toMutableList().also { it[i] = block(it[i]) })
+    }
+
+    override fun patchTile(pageIndex: Int, tileId: String, config: Map<String, String>): String? {
+        val p = pageAt(pageIndex) ?: return "No such page"
+        if (p.tiles.none { it.id == tileId }) return "That tile isn't on the page anymore"
+        // A blank field means "use the default", so it's removed rather than saved as "".
+        val set = config.filterValues { it.isNotBlank() }.mapValues { it.value.take(4000) }
+        val cleared = config.filterValues { it.isBlank() }.keys
+        updatePageAt(pageIndex) { pg -> pg.copy(tiles = pg.tiles.map { if (it.id == tileId) it.copy(config = it.config - cleared + set) else it }) }
+        return null
+    }
+
+    override fun addTileFromWeb(pageIndex: Int, type: String, config: Map<String, String>): String? {
+        val t = runCatching { TileType.valueOf(type) }.getOrNull() ?: return "Unknown tile type"
+        if (pageAt(pageIndex) == null) return "No such page"
+        val before = pageIndex
+        val old = this.pageIndex
+        this.pageIndex = before
+        val ok = addTile(t, config)
+        this.pageIndex = old
+        return if (ok) null else "No room on that page"
+    }
+
+    override fun deleteTileFromWeb(pageIndex: Int, tileId: String): String? {
+        val p = pageAt(pageIndex) ?: return "No such page"
+        if (p.tiles.none { it.id == tileId }) return "That tile isn't on the page anymore"
+        History.save(getApplication(), json, dashboard, "Before a phone deleted a tile")
+        updatePageAt(pageIndex) { pg -> pg.copy(tiles = pg.tiles.filterNot { it.id == tileId }) }
+        return null
+    }
+
+    override fun showPage(index: Int): String? {
+        if (index !in dashboard.pages.indices) return "There are ${dashboard.pages.size} pages"
+        fullScreenTile = null
+        goToPage(index)
+        return null
+    }
+
+    override fun appsJson(): String = webJson.encodeToString(
+        kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.MapSerializer(String.serializer(), String.serializer())),
+        runCatching { Apps.list(getApplication()) }.getOrDefault(emptyList()).map { mapOf("pkg" to it.pkg, "label" to it.label) },
+    )
+
+    override fun inputsJson(): String = webJson.encodeToString(
+        kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.MapSerializer(String.serializer(), String.serializer())),
+        runCatching { Inputs.list(getApplication()) }.getOrDefault(emptyList()).map { mapOf("id" to it.id, "label" to it.label) },
+    )
 
     // ------------------------------------------------------------ apps
 

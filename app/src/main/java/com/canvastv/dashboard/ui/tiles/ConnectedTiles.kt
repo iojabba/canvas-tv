@@ -368,3 +368,25 @@ fun SpeedTestTile(tile: Tile) {
         st.error?.let { Text("Test failed: $it", fontSize = 12.sp, color = Color(0xFFFF8A80), maxLines = 1) }
     }
 }
+
+// ---------------------------------------------------------------- message board
+
+@Composable
+fun MessagesTile(tile: Tile) {
+    val p = LocalPalette.current
+    val msgs = com.canvastv.dashboard.data.Messages.list
+    Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TileHeader(tile.cfg("title").ifBlank { "Messages" })
+        if (msgs.isEmpty()) {
+            StatusLine(if (com.canvastv.dashboard.data.CompanionServer.running) "Send one from your phone: ${com.canvastv.dashboard.data.CompanionServer.address() ?: ""}"
+                else "Turn on Settings → Phone setup to send messages from your phone")
+            return@Column
+        }
+        msgs.take(tile.h * 2).forEach { m ->
+            Column {
+                Text(m.text, fontSize = 17.sp, color = p.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(listOfNotNull(m.from.takeIf { it.isNotBlank() }, ago(m.time)).joinToString(" · "), fontSize = 11.sp, color = p.muted, maxLines = 1)
+            }
+        }
+    }
+}

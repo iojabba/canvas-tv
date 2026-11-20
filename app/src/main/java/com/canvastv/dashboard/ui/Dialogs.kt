@@ -230,6 +230,7 @@ fun tileTitle(ctx: android.content.Context, t: Tile): String = when (t.type) {
     TileType.NOTE -> t.cfg("text").take(40).ifBlank { "Note" }
     TileType.VIDEO, TileType.WEB, TileType.NEWS, TileType.CALENDAR -> t.cfg("title").ifBlank { t.type.label }
     TileType.FOLDER -> t.cfg("name").ifBlank { "Folder" }
+    TileType.MESSAGES -> t.cfg("title").ifBlank { "Message board" }
     TileType.COUNTDOWN -> t.cfg("label").ifBlank { "Countdown" }
     TileType.WEATHER -> t.cfg("place").ifBlank { "Weather" }
     TileType.CLOCK -> t.cfg("city").ifBlank { "Clock" }
@@ -443,6 +444,10 @@ fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> U
                     item { RefreshRow(tile, listOf("1", "5", "15", "60"), "15", onChange, label = "Reload every") }
                     item { CycleRow("JavaScript", yesNo(tile.cfgBool("js", true)), { set("js", (!tile.cfgBool("js", true)).toString()) }) }
                 }
+                TileType.MESSAGES -> {
+                    item { TextRow("Title", tile.cfg("title"), "Messages") { set("title", it) } }
+                    item { Text("Shows messages sent from the phone page or web commands (Settings → Phone setup).", color = LocalPalette.current.muted, fontSize = 13.sp, modifier = Modifier.focusRequester(first)) }
+                }
                 TileType.SPEEDTEST -> item { Text("Uses Cloudflare's speed test servers (about 30 MB per test). Press OK on the tile to run it.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
                 TileType.NOW_PLAYING -> item { Text("Shows what's playing on the TV. OK plays or pauses; hold OK for more controls.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
                 TileType.STATS -> item { Text("Shows memory, storage, network speed, IP address and uptime.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
@@ -565,6 +570,22 @@ fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
                     ActionButton(if (confirmRemovePin) "Press again to remove the PIN" else "Remove PIN") {
                         if (confirmRemovePin) { vm.setPin(null); confirmRemovePin = false } else confirmRemovePin = true
                     }
+                }
+            }
+
+            item { SectionLabel("Phone setup") }
+            item { CycleRow("Set up from a phone or computer", if (d.phoneSetup) "On" else "Off", { vm.setPhoneSetup(!d.phoneSetup) }) }
+            if (d.phoneSetup) item {
+                val p = LocalPalette.current
+                val running = com.canvastv.dashboard.data.CompanionServer.running
+                Column {
+                    if (running) {
+                        Text("On a phone on the same Wi-Fi, open:", color = p.muted, fontSize = 13.sp)
+                        Text(com.canvastv.dashboard.data.CompanionServer.address() ?: "(no network)", color = p.onSurface, fontSize = 22.sp)
+                        Text("Pairing code: ${com.canvastv.dashboard.data.CompanionServer.pairingCode}", color = p.accentText, fontSize = 22.sp)
+                    } else Text("Couldn't start the phone page (port ${com.canvastv.dashboard.data.CompanionServer.PORT} is busy). Try turning it off and on.", color = Color(0xFFFF8A80), fontSize = 13.sp)
+                    Spacer(Modifier.padding(4.dp))
+                    ActionButton("Forget paired phones and tokens") { com.canvastv.dashboard.data.CompanionServer.resetPairing(); vm.message = "Paired phones forgotten. New code shown." }
                 }
             }
 
