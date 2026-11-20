@@ -1,0 +1,845 @@
+package com.canvastv.dashboard.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.tv.material3.Button
+import androidx.tv.material3.OutlinedButton
+import androidx.tv.material3.Text
+import com.canvastv.dashboard.BuildConfigInfo
+import com.canvastv.dashboard.data.Apps
+import com.canvastv.dashboard.data.DashboardViewModel
+import com.canvastv.dashboard.data.Backups
+import com.canvastv.dashboard.data.Inputs
+import com.canvastv.dashboard.data.NowPlaying
+import com.canvastv.dashboard.data.NowPlayingState
+import com.canvastv.dashboard.data.SavedLayout
+import com.canvastv.dashboard.data.describeTime
+import com.canvastv.dashboard.model.FocusEffect
+import com.canvastv.dashboard.model.FontChoice
+import com.canvastv.dashboard.model.Background
+import com.canvastv.dashboard.model.BgKind
+import com.canvastv.dashboard.model.ThemeMode
+import com.canvastv.dashboard.model.Tile
+import com.canvastv.dashboard.model.TileType
+import com.canvastv.dashboard.model.AppSort
+import com.canvastv.dashboard.ui.tiles.folderApps
+
+// ---------------------------------------------------------------- shared building blocks
+
+@Composable
+fun Panel(title: String, onDismiss: () -> Unit, wide: Boolean = false, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier
+                .width(if (wide) 760.dp else 520.dp)
+                .heightIn(max = 620.dp)
+                .background(p.surface.copy(alpha = 0.97f), RoundedCornerShape(20.dp))
+                .border(1.dp, p.onSurface.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                .padding(24.dp),
+        ) {
+            Text(title, fontSize = 24.sp)
+            Spacer(Modifier.padding(6.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ActionButton(label: String, modifier: Modifier = Modifier, primary: Boolean = false, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    if (primary) AppButton(onClick = onClick, modifier = modifier.fillMaxWidth()) { Text(label) }
+    else AppOutlinedButton(onClick = onClick, modifier = modifier.fillMaxWidth()) { Text(label) }
+}
+
+/** A settings row whose button cycles through values on each press. */
+@Composable
+private fun CycleRow(label: String, value: String, onNext: () -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 16.sp, color = p.onSurface, modifier = Modifier.weight(1f))
+        AppOutlinedButton(onClick = onNext, modifier = modifier.width(260.dp)) { Text(value, maxLines = 1) }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, fontSize = 14.sp, color = LocalPalette.current.accentText, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+}
+
+/**
+ * Single-line text entry. It shows as a button so scrolling past it doesn't pop up the keyboard;
+ * OK starts typing, and the keyboard's Done (or Back) saves and closes the keyboard.
+ */
+@Composable
+private fun TextRow(label: String, initial: String, hint: String = "", onDone: (String) -> Unit) {
+    val p = LocalPalette.current
+    var value by remember(initial) { mutableStateOf(initial) }
+    var typing by remember { mutableStateOf(false) }
+    val field = remember { FocusRequester() }
+    val button = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    fun finish() {
+        if (!typing) return
+        typing = false
+        keyboard?.hide()
+        onDone(value.trim())
+    }
+    LaunchedEffect(typing) {
+        if (typing) { runCatching { field.requestFocus() }; keyboard?.show() } else runCatching { button.requestFocus() }
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, fontSize = 14.sp, color = p.muted)
+        if (!typing) {
+            androidx.tv.material3.Surface(
+                onClick = { typing = true },
+                modifier = Modifier.fillMaxWidth().focusRequester(button),
+                shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent, contentColor = p.onSurface,
+                    focusedContainerColor = p.onSurface, focusedContentColor = readableOn(p.onSurface),
+                ),
+                border = androidx.tv.material3.ClickableSurfaceDefaults.border(
+                    border = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(1.dp, p.onSurface.copy(alpha = 0.3f)), shape = RoundedCornerShape(10.dp)),
+                ),
+                scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            ) {
+                Text(
+                    value.ifEmpty { hint.ifEmpty { "Press OK to type" } },
+                    fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    color = if (value.isEmpty()) p.muted else Color.Unspecified,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+            }
+        } else {
+            Box(
+                Modifier.fillMaxWidth()
+                    .border(2.dp, p.accent, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                if (value.isEmpty() && hint.isNotEmpty()) Text(hint, fontSize = 16.sp, color = p.muted.copy(alpha = 0.6f))
+                BasicTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = p.onSurface, fontSize = 16.sp),
+                    cursorBrush = SolidColor(p.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { finish() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field)
+                        .onPreviewKeyEvent { ev ->
+                            val code = ev.nativeKeyEvent.keyCode
+                            if ((code == android.view.KeyEvent.KEYCODE_BACK || code == android.view.KeyEvent.KEYCODE_DPAD_CENTER) && ev.type == KeyEventType.KeyUp) { finish(); true }
+                            else code == android.view.KeyEvent.KEYCODE_BACK
+                        }
+                        .onFocusChanged { if (!it.isFocused && typing) finish() },
+                )
+            }
+        }
+    }
+}
+
+private fun <T> List<T>.after(current: T): T = this[(indexOf(current) + 1).mod(size)]
+
+// ---------------------------------------------------------------- tile actions
+
+private val OPENABLE = setOf(TileType.APP, TileType.HDMI, TileType.VIDEO, TileType.APP_DRAWER, TileType.FOLDER)
+
+@Composable
+fun TileActionsDialog(
+    tile: Tile,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onMove: () -> Unit,
+    onResize: () -> Unit,
+    onConfigure: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    var confirmDelete by remember { mutableStateOf(false) }
+    Panel(tile.type.label, onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (tile.type in OPENABLE) ActionButton("Open", Modifier.focusRequester(first), primary = true, onClick = onOpen)
+            ActionButton("Move", if (tile.type in OPENABLE) Modifier else Modifier.focusRequester(first), onClick = onMove)
+            ActionButton("Resize", onClick = onResize)
+            ActionButton("Configure", onClick = onConfigure)
+            ActionButton("Duplicate", onClick = onDuplicate)
+            ActionButton(if (confirmDelete) "Press again to delete" else "Delete", onClick = { if (confirmDelete) onDelete() else confirmDelete = true })
+        }
+    }
+}
+
+// ---------------------------------------------------------------- add tile
+
+@Composable
+fun AddTileDialog(onDismiss: () -> Unit, onAdd: (TileType, Map<String, String>) -> Unit) {
+    val ctx = LocalContext.current
+    var picking by remember { mutableStateOf<TileType?>(null) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(picking) { runCatching { first.requestFocus() } }
+    when (picking) {
+        TileType.APP -> {
+            val apps = remember { Apps.list(ctx) }
+            Panel("Choose an app", onDismiss) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(apps.size) { i ->
+                        val a = apps[i]
+                        ActionButton(a.label + if (a.isTvApp) "" else "  (phone app)", if (i == 0) Modifier.focusRequester(first) else Modifier) {
+                            onAdd(TileType.APP, mapOf("pkg" to a.pkg))
+                        }
+                    }
+                }
+            }
+        }
+        TileType.HDMI -> {
+            val inputs = remember { Inputs.list(ctx) }
+            Panel("Choose an input", onDismiss) {
+                if (inputs.isEmpty()) Text("This TV doesn't list any HDMI inputs for apps.", color = LocalPalette.current.muted)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    inputs.forEachIndexed { i, inp ->
+                        ActionButton(inp.label, if (i == 0) Modifier.focusRequester(first) else Modifier) {
+                            onAdd(TileType.HDMI, mapOf("inputId" to inp.id, "label" to inp.label))
+                        }
+                    }
+                }
+            }
+        }
+        else -> Panel("Add a tile", onDismiss) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(TileType.entries.size) { i ->
+                    val t = TileType.entries[i]
+                    ActionButton("${t.label}  (${t.defaultW}×${t.defaultH})", if (i == 0) Modifier.focusRequester(first) else Modifier) {
+                        if (t == TileType.APP || t == TileType.HDMI) picking = t else onAdd(t, emptyMap())
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- configure tile
+
+private val Zones = listOf("" to "Local time", "America/Los_Angeles" to "Los Angeles", "America/Denver" to "Denver",
+    "America/Chicago" to "Chicago", "America/New_York" to "New York", "Europe/London" to "London",
+    "Europe/Paris" to "Paris", "Asia/Tokyo" to "Tokyo", "Australia/Sydney" to "Sydney")
+private val TileColors = listOf<String?>(null, "#1E3A5F", "#3B1F4A", "#1F4A3B", "#4A3B1F", "#000000", "#FFFFFF")
+
+@Composable
+fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    fun set(k: String, v: String) = onChange(tile.withCfg(k, v))
+    fun yesNo(b: Boolean) = if (b) "On" else "Off"
+    Panel("Configure ${tile.type.label.lowercase()}", onDismiss, wide = true) {
+        LazyColumn {
+            item { SectionLabel("Content") }
+            when (tile.type) {
+                TileType.CLOCK -> {
+                    item { CycleRow("Style", if (tile.cfg("style") == "analog") "Analog" else "Digital",
+                        { set("style", if (tile.cfg("style") == "analog") "digital" else "analog") }, Modifier.focusRequester(first)) }
+                    item { CycleRow("24-hour", yesNo(tile.cfgBool("24h", false)), { set("24h", (!tile.cfgBool("24h", false)).toString()) }) }
+                    item { CycleRow("Show date", yesNo(tile.cfgBool("showDate", true)), { set("showDate", (!tile.cfgBool("showDate", true)).toString()) }) }
+                    item {
+                        val cur = Zones.firstOrNull { it.first == tile.cfg("timezone") } ?: Zones[0]
+                        CycleRow("Time zone", cur.second, {
+                            val next = Zones.after(cur)
+                            onChange(tile.withCfg("timezone", next.first).withCfg("city", if (next.first.isBlank()) "" else next.second))
+                        })
+                    }
+                }
+                TileType.APP -> {
+                    item { CycleRow("Show as", if (tile.cfg("display") == "text") "Plain text" else "Banner / icon",
+                        { set("display", if (tile.cfg("display") == "text") "art" else "text") }, Modifier.focusRequester(first)) }
+                    item { CycleRow("Label on banner", yesNo(tile.cfgBool("showLabel", false)), { set("showLabel", (!tile.cfgBool("showLabel", false)).toString()) }) }
+                    item { TextRow("Custom label", tile.cfg("label"), Apps.label(ctx, tile.cfg("pkg"))) { set("label", it) } }
+                }
+                TileType.HDMI -> {
+                    item {
+                        val inputs = Inputs.list(ctx)
+                        val cur = inputs.firstOrNull { it.id == tile.cfg("inputId") }
+                        CycleRow("Input", cur?.label ?: tile.cfg("label", "Choose…"), {
+                            if (inputs.isNotEmpty()) {
+                                val next = if (cur == null) inputs[0] else inputs.after(cur)
+                                onChange(tile.withCfg("inputId", next.id).withCfg("label", next.label))
+                            }
+                        }, Modifier.focusRequester(first))
+                    }
+                    item { CycleRow("Live preview in tile", yesNo(tile.cfgBool("preview", true)), { set("preview", (!tile.cfgBool("preview", true)).toString()) }) }
+                    item { SectionLabel("Full screen (game mode)") }
+                    item { TextRow("Corner video URL (IPTV, Plex/Jellyfin, camera, MP4)", tile.cfg("cornerUrl"), "Leave empty for none") { set("cornerUrl", it) } }
+                    item { CycleRow("Corner clock", yesNo(tile.cfgBool("cornerClock", true)), { set("cornerClock", (!tile.cfgBool("cornerClock", true)).toString()) }) }
+                    item {
+                        val pos = listOf("BR" to "Bottom right", "BL" to "Bottom left", "TR" to "Top right", "TL" to "Top left")
+                        val cur = pos.firstOrNull { it.first == tile.cfg("cornerPos", "BR") } ?: pos[0]
+                        CycleRow("Corner position", cur.second, { set("cornerPos", pos.after(cur).first) })
+                    }
+                    item {
+                        val sizes = listOf("S", "M", "L")
+                        val cur = tile.cfg("cornerSize", "M").takeIf { it in sizes } ?: "M"
+                        CycleRow("Corner size", cur, { set("cornerSize", sizes.after(cur)) })
+                    }
+                    item { CycleRow("Corner video sound", yesNo(!tile.cfgBool("cornerMuted", true)), { set("cornerMuted", (!tile.cfgBool("cornerMuted", true)).toString()) }) }
+                }
+                TileType.NOTE -> {
+                    item { TextRow("Text", tile.cfg("text"), "Type a note") { set("text", it) } }
+                    item {
+                        val sizes = listOf("S", "M", "L", "XL")
+                        val cur = tile.cfg("size", "M").takeIf { it in sizes } ?: "M"
+                        CycleRow("Text size", cur, { set("size", sizes.after(cur)) }, Modifier.focusRequester(first))
+                    }
+                }
+                TileType.VIDEO -> {
+                    item { CycleRow("Sound", yesNo(!tile.cfgBool("muted", true)), { set("muted", (!tile.cfgBool("muted", true)).toString()) }, Modifier.focusRequester(first)) }
+                    item { TextRow("Stream URL", tile.cfg("url"), "https://… or rtsp://…") { set("url", it) } }
+                    item { TextRow("Title", tile.cfg("title"), "Optional") { set("title", it) } }
+                }
+                TileType.COUNTDOWN -> {
+                    item { TextRow("Label", tile.cfg("label"), "Vacation, Birthday, Game day…") { set("label", it) } }
+                    item { TextRow("Date (year-month-day)", tile.cfg("date"), "2026-12-25") { v ->
+                        if (v.isBlank() || runCatching { java.time.LocalDate.parse(v) }.isSuccess) set("date", v) else onChange(tile) } }
+                    item { TextRow("Time (24-hour, optional)", tile.cfg("time"), "18:30") { v ->
+                        if (v.isBlank() || runCatching { java.time.LocalTime.parse(v) }.isSuccess) set("time", v) } }
+                    item { CycleRow("Repeats every year", yesNo(tile.cfgBool("yearly", false)), { set("yearly", (!tile.cfgBool("yearly", false)).toString()) }, Modifier.focusRequester(first)) }
+                }
+                TileType.APP_DRAWER -> {
+                    item { TextRow("Label", tile.cfg("label"), "All apps") { set("label", it) } }
+                    item { Text("Sorting and hidden apps are set inside the drawer (hold OK on an app).", color = LocalPalette.current.muted, fontSize = 13.sp, modifier = Modifier.focusRequester(first)) }
+                }
+                TileType.FOLDER -> {
+                    val pkgs = folderApps(tile)
+                    item { TextRow("Folder name", tile.cfg("name"), "Games, Kids, Music…") { set("name", it) } }
+                    item { SectionLabel("Apps in this folder") }
+                    if (pkgs.isEmpty()) item { Text("No apps yet.", color = LocalPalette.current.muted, fontSize = 14.sp) }
+                    items(pkgs) { pkg ->
+                        CycleRow(Apps.label(ctx, pkg), "Remove", { set("pkgs", (pkgs - pkg).joinToString(",")) })
+                    }
+                    item {
+                        var adding by remember { mutableStateOf(false) }
+                        ActionButton("Add an app", Modifier.focusRequester(first)) { adding = true }
+                        if (adding) AppPickerDialog(exclude = pkgs.toSet(), onDismiss = { adding = false }) { pkg ->
+                            set("pkgs", (pkgs + pkg).joinToString(",")); adding = false
+                        }
+                    }
+                }
+                TileType.WEATHER -> {
+                    item { TextRow("City", tile.cfg("place"), "Seattle, Washington") { set("place", it) } }
+                    item { CycleRow("Units", if (tile.cfg("units", "F") == "F") "°F, mph" else "°C, km/h", { set("units", if (tile.cfg("units", "F") == "F") "C" else "F") }, Modifier.focusRequester(first)) }
+                    item {
+                        val mins = listOf("15", "30", "60", "180")
+                        val cur = tile.cfg("refreshMin", "30").takeIf { it in mins } ?: "30"
+                        CycleRow("Refresh every", "$cur min", { set("refreshMin", mins.after(cur)) })
+                    }
+                    item { Text("Weather from Open-Meteo. The last forecast is kept and shown when the TV is offline.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+                }
+                TileType.NEWS -> {
+                    item { TextRow("Feed addresses (comma separated)", tile.cfg("urls"), "https://feeds.npr.org/1001/rss.xml") { set("urls", it) } }
+                    item { TextRow("Title", tile.cfg("title"), "News") { set("title", it) } }
+                    item { CycleRow("Style", if (tile.cfg("style") == "ticker") "Scrolling ticker" else "Headline list", { set("style", if (tile.cfg("style") == "ticker") "list" else "ticker") }, Modifier.focusRequester(first)) }
+                    item { RefreshRow(tile, listOf("5", "15", "30", "60"), "15", onChange) }
+                }
+                TileType.TICKER -> {
+                    item { TextRow("Symbols (comma separated)", tile.cfg("symbols", "BTC, ETH, AAPL, MSFT"), "AAPL, MSFT, BTC, ETH, ^SPX") { set("symbols", it) } }
+                    item { RefreshRow(tile, listOf("5", "10", "30", "60"), "10", onChange, Modifier.focusRequester(first)) }
+                    item { Text("Stocks from Stooq (US symbols, delayed), crypto from CoinGecko: BTC, ETH, SOL, DOGE, XRP, ADA, LTC, DOT, AVAX, LINK. Change is since today's open for stocks and over 24 hours for crypto.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+                }
+                TileType.CALENDAR -> {
+                    item { TextRow("Private iCal address (comma separate several)", tile.cfg("icsUrls"), "https://calendar.google.com/calendar/ical/…/basic.ics") { set("icsUrls", it) } }
+                    item { TextRow("Title", tile.cfg("title"), "Coming up") { set("title", it) } }
+                    item {
+                        val ds = listOf("1", "3", "7", "14", "30")
+                        val cur = tile.cfg("days", "7").takeIf { it in ds } ?: "7"
+                        CycleRow("Show the next", "$cur days", { set("days", ds.after(cur)) }, Modifier.focusRequester(first))
+                    }
+                    item { RefreshRow(tile, listOf("15", "30", "60"), "30", onChange) }
+                    item { Text("Google Calendar: on a computer open Settings → pick the calendar → \"Secret address in iCal format\". Anyone with that address can read the calendar.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+                }
+                TileType.PHOTOS -> {
+                    item { TextRow("Picture or feed addresses (comma separated)", tile.cfg("sources"), "https://…/photo.jpg, https://…/feed.rss") { set("sources", it) } }
+                    item {
+                        val secs = listOf("5", "10", "15", "30", "60", "300")
+                        val cur = tile.cfg("seconds", "15").takeIf { it in secs } ?: "15"
+                        CycleRow("Change every", "$cur s", { set("seconds", secs.after(cur)) }, Modifier.focusRequester(first))
+                    }
+                    item { CycleRow("Shuffle", yesNo(tile.cfgBool("shuffle", true)), { set("shuffle", (!tile.cfgBool("shuffle", true)).toString()) }) }
+                    item { CycleRow("Picture fit", if (tile.cfg("fit") == "fit") "Whole picture" else "Fill the tile", { set("fit", if (tile.cfg("fit") == "fit") "fill" else "fit") }) }
+                    item { Text("Google Photos albums can't be read directly by apps; a shared album exported to a feed, a Flickr feed, or a list of picture links works.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+                }
+                TileType.WEB -> {
+                    item { TextRow("Web address", tile.cfg("url"), "https://…") { set("url", it) } }
+                    item { TextRow("Title", tile.cfg("title"), "Optional") { set("title", it) } }
+                    item {
+                        val zs = listOf("50", "75", "100", "125", "150")
+                        val cur = tile.cfg("zoom", "100").takeIf { it in zs } ?: "100"
+                        CycleRow("Zoom", "$cur%", { set("zoom", zs.after(cur)) }, Modifier.focusRequester(first))
+                    }
+                    item { RefreshRow(tile, listOf("1", "5", "15", "60"), "15", onChange, label = "Reload every") }
+                    item { CycleRow("JavaScript", yesNo(tile.cfgBool("js", true)), { set("js", (!tile.cfgBool("js", true)).toString()) }) }
+                }
+                TileType.SPEEDTEST -> item { Text("Uses Cloudflare's speed test servers (about 30 MB per test). Press OK on the tile to run it.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
+                TileType.NOW_PLAYING -> item { Text("Shows what's playing on the TV. OK plays or pauses; hold OK for more controls.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
+                TileType.STATS -> item { Text("Shows memory, storage, network speed, IP address and uptime.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
+            }
+            item { SectionLabel("Style") }
+            item {
+                val radii = listOf(0, 8, 18, 28)
+                CycleRow("Corner radius", "${tile.style.cornerDp} dp", { onChange(tile.copy(style = tile.style.copy(cornerDp = radii.after(tile.style.cornerDp.takeIf { it in radii } ?: 18)))) })
+            }
+            item {
+                val ops = listOf(0.25f, 0.45f, 0.6f, 0.72f, 0.85f, 1f)
+                CycleRow("Opacity", "${(tile.style.opacity * 100).toInt()}%", { onChange(tile.copy(style = tile.style.copy(opacity = ops.after(ops.minBy { kotlin.math.abs(it - tile.style.opacity) })))) })
+            }
+            item { CycleRow("Border", yesNo(tile.style.border), { onChange(tile.copy(style = tile.style.copy(border = !tile.style.border))) }) }
+            item {
+                CycleRow("Tile color", tile.style.colorHex ?: "Theme", { onChange(tile.copy(style = tile.style.copy(colorHex = TileColors.after(tile.style.colorHex.takeIf { it in TileColors })))) })
+            }
+            item { Spacer(Modifier.padding(6.dp)); ActionButton("Done", primary = true, onClick = onDismiss) }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- settings
+
+@Composable
+fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
+    val d = vm.dashboard
+    val t = d.theme
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    var confirmReset by remember { mutableStateOf(false) }
+    var confirmRemovePin by remember { mutableStateOf(false) }
+    var preset by remember { mutableStateOf("Minimal") }
+    var settingPin by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf(false) }
+    if (settingPin) { SetPinDialog(onDismiss = { settingPin = false }, onSet = { vm.setPin(it); settingPin = false }); return }
+    if (restoring) { RestoreDialog(vm, onDismiss = { restoring = false }); return }
+    fun theme(block: (com.canvastv.dashboard.model.ThemeSpec) -> com.canvastv.dashboard.model.ThemeSpec) = vm.replaceDashboard(d.copy(theme = block(t)))
+    fun bg(block: (Background) -> Background) = theme { it.copy(background = block(it.background)) }
+
+    Panel("Settings", onDismiss, wide = true) {
+        LazyColumn {
+            item { SectionLabel("Theme") }
+            item { CycleRow("Mode", t.mode.label, { theme { it.copy(mode = ThemeMode.entries.after(it.mode)) } }, Modifier.focusRequester(first)) }
+            item { CycleRow("Accent color", t.accentHex, { theme { it.copy(accentHex = AccentChoices.after(it.accentHex.takeIf { h -> h in AccentChoices } ?: AccentChoices[0])) } }) }
+            item {
+                val names = BackgroundPresets.map { it.first } + listOf("Solid black", "Image from URL", "Bing photo of the day")
+                val cur = when (t.background.kind) {
+                    BgKind.IMAGE -> "Image from URL"
+                    BgKind.BING -> "Bing photo of the day"
+                    BgKind.SOLID -> "Solid black"
+                    BgKind.GRADIENT -> BackgroundPresets.firstOrNull { it.second == t.background.color1 && it.third == t.background.color2 }?.first ?: names[0]
+                }
+                CycleRow("Background", cur, {
+                    when (val next = names.after(cur)) {
+                        "Solid black" -> bg { it.copy(kind = BgKind.SOLID, color1 = "#000000") }
+                        "Image from URL" -> bg { it.copy(kind = BgKind.IMAGE) }
+                        "Bing photo of the day" -> bg { it.copy(kind = BgKind.BING, dim = maxOf(it.dim, 0.25f)) }
+                        else -> BackgroundPresets.first { it.first == next }.let { pr -> bg { it.copy(kind = BgKind.GRADIENT, color1 = pr.second, color2 = pr.third) } }
+                    }
+                })
+            }
+            if (t.background.kind == BgKind.IMAGE) item { TextRow("Background image URL", t.background.imageUrl, "https://…/photo.jpg") { u -> bg { it.copy(imageUrl = u) } } }
+            item { CycleRow("Accent from background picture", if (t.autoAccent) "On" else "Off", { theme { it.copy(autoAccent = !it.autoAccent) } }) }
+            item { CycleRow("Holiday colors (automatic)", if (t.seasonal) "On" else "Off", { theme { it.copy(seasonal = !it.seasonal) } }) }
+            item {
+                val names = listOf("Off") + com.canvastv.dashboard.data.GameDayColors.map { it.name }
+                CycleRow("Game day colors", names[t.gameDayColors + 1], { theme { it.copy(gameDayColors = if (it.gameDayColors + 1 >= com.canvastv.dashboard.data.GameDayColors.size) -1 else it.gameDayColors + 1) } })
+            }
+            if (t.gameDayColors >= 0) item {
+                val sets = listOf(listOf(7) to "Sundays", listOf(1) to "Mondays", listOf(4) to "Thursdays", listOf(6) to "Saturdays",
+                    listOf(6, 7) to "Weekends", listOf(1, 4, 7) to "Mon, Thu, Sun", (1..7).toList() to "Every day")
+                val cur = sets.firstOrNull { it.first == t.gameDays } ?: sets[0]
+                CycleRow("Game days", cur.second, { theme { it.copy(gameDays = sets.after(cur).first) } })
+            }
+            item {
+                val dims = listOf(0f, 0.25f, 0.5f, 0.7f)
+                CycleRow("Background dimming", "${(t.background.dim * 100).toInt()}%", { bg { it.copy(dim = dims.after(dims.minBy { x -> kotlin.math.abs(x - it.dim) })) } })
+            }
+            item {
+                val scales = listOf(0.85f, 1f, 1.15f, 1.3f, 1.5f, 1.75f)
+                CycleRow("Text size", "${(t.fontScale * 100).toInt()}%", { theme { it.copy(fontScale = scales.after(scales.minBy { x -> kotlin.math.abs(x - it.fontScale) })) } })
+            }
+            item {
+                val zooms = listOf(1f, 1.03f, 1.06f, 1.1f)
+                CycleRow("Focus zoom", if (t.focusScale <= 1f) "Off" else "${((t.focusScale - 1) * 100).toInt()}%", { theme { it.copy(focusScale = zooms.after(zooms.minBy { x -> kotlin.math.abs(x - it.focusScale) })) } })
+            }
+            item { CycleRow("Focus effect", t.focusEffect.label, { theme { it.copy(focusEffect = FocusEffect.entries.after(it.focusEffect)) } }) }
+            item { CycleRow("Font", t.font.label, { theme { it.copy(font = FontChoice.entries.after(it.font)) } }) }
+            item { CycleRow("High contrast", if (t.highContrast) "On" else "Off", { theme { it.copy(highContrast = !it.highContrast) } }) }
+
+            item { SectionLabel("Layout") }
+            item {
+                val cols = listOf(8, 10, 12, 16)
+                CycleRow("Grid columns", "${d.columns}", { vm.replaceDashboard(regrid(d, cols.after(d.columns.takeIf { it in cols } ?: 12), d.rows)) })
+            }
+            item {
+                val rows = listOf(4, 5, 6, 8)
+                CycleRow("Grid rows", "${d.rows}", { vm.replaceDashboard(regrid(d, d.columns, rows.after(d.rows.takeIf { it in rows } ?: 6))) })
+            }
+            item {
+                val ov = listOf(0f, 2.5f, 5f)
+                CycleRow("Overscan margin", "${d.overscanPct}%", { vm.replaceDashboard(d.copy(overscanPct = ov.after(ov.minBy { kotlin.math.abs(it - d.overscanPct) }))) })
+            }
+            item {
+                val timers = listOf(0, 15, 30, 60, 120)
+                CycleRow("Switch pages every", if (d.pageTimerSec == 0) "Off" else "${d.pageTimerSec} s", { vm.replaceDashboard(d.copy(pageTimerSec = timers.after(d.pageTimerSec.takeIf { it in timers } ?: 0))) })
+            }
+            item { TextRow("Name of this page", vm.page.name) { vm.renamePage(it) } }
+
+            item { SectionLabel("Performance") }
+            item { CycleRow("Lightweight mode", if (d.lightweight) "On" else "Off", { vm.setLightweight(!d.lightweight) }) }
+            item { Text("Turns off live HDMI and video previews in tiles, zoom, glow and background images. Full screen still works.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+
+            item { SectionLabel("Edit lock") }
+            item {
+                if (d.pinHash == null) ActionButton("Set a PIN for edit mode and Settings") { settingPin = true }
+                else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("Change PIN") { settingPin = true }
+                    ActionButton(if (confirmRemovePin) "Press again to remove the PIN" else "Remove PIN") {
+                        if (confirmRemovePin) { vm.setPin(null); confirmRemovePin = false } else confirmRemovePin = true
+                    }
+                }
+            }
+
+            item { SectionLabel("Backup and restore") }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("Save a backup") { vm.exportBackup() }
+                    ActionButton("Restore a layout or earlier version…") { restoring = true }
+                }
+            }
+            item { Text("Backups are saved to ${Backups.ADB_PATH} (copy them with adb pull).", color = LocalPalette.current.muted, fontSize = 13.sp) }
+
+            item { SectionLabel("Presets") }
+            item {
+                val presets = listOf("Minimal", "Info Board", "Media Hub")
+                CycleRow("Preset", preset, { preset = presets.after(preset); confirmReset = false })
+            }
+            item {
+                ActionButton(if (confirmReset) "Press again to replace your layout" else "Use the $preset preset") {
+                    if (confirmReset) { vm.resetToPreset(preset); onDismiss() } else confirmReset = true
+                }
+            }
+            item {
+                Text(when (preset) {
+                    "Info Board" -> "Clock, weather, countdown, calendar, headlines and a market ticker, plus an Apps page."
+                    "Media Hub" -> "Now playing, your console on HDMI, streaming apps, a folder for the rest and the app drawer."
+                    else -> "Clock, stats, your console and your TV apps, plus an Apps page. Also resets the look."
+                } + " Your current layout is kept in version history.", color = LocalPalette.current.muted, fontSize = 13.sp)
+            }
+
+            item { SectionLabel("About") }
+            item {
+                val p = LocalPalette.current
+                val cmd = if (p.dark) Color(0xFF9EE493) else Color(0xFF1B6E2A)
+                Column {
+                    Text("Canvas TV ${BuildConfigInfo.VERSION}", color = p.onSurface, fontSize = 15.sp)
+                    Text("Remote: Menu toggles edit mode · long-press OK edits a tile · Channel up/down switches pages.", color = p.muted, fontSize = 13.sp)
+                    Text("To make this your home screen, run from a computer:", color = p.muted, fontSize = 13.sp)
+                    Text("adb shell cmd package set-home-activity com.canvastv.dashboard/.ui.MainActivity", color = cmd, fontSize = 12.sp)
+                    Text("To let the Now Playing tile see what's playing, run once:", color = p.muted, fontSize = 13.sp)
+                    Text("adb shell cmd notification allow_listener com.canvastv.dashboard/com.canvastv.dashboard.data.MediaListener", color = cmd, fontSize = 12.sp)
+                    Text("Forgot the edit PIN? Run:", color = p.muted, fontSize = 13.sp)
+                    Text("adb shell am start -n com.canvastv.dashboard/.ui.MainActivity --ez clearPin true", color = cmd, fontSize = 12.sp)
+                }
+            }
+            item { Spacer(Modifier.padding(6.dp)); ActionButton("Close", primary = true, onClick = onDismiss) }
+        }
+    }
+}
+
+/** Changes the grid size and pulls tiles back inside it. */
+private fun regrid(d: com.canvastv.dashboard.model.Dashboard, cols: Int, rows: Int) = d.copy(
+    columns = cols, rows = rows,
+    pages = d.pages.map { p ->
+        p.copy(tiles = p.tiles.map { t ->
+            val w = t.w.coerceAtMost(cols); val h = t.h.coerceAtMost(rows)
+            t.copy(w = w, h = h, x = t.x.coerceAtMost(cols - w), y = t.y.coerceAtMost(rows - h))
+        })
+    },
+)
+
+// ---------------------------------------------------------------- PIN pad
+
+/**
+ * A 4-digit PIN pad. Works with the on-screen keys or the remote's number buttons.
+ * [onPin] returns null when the PIN is accepted, or a message to show and start over.
+ */
+@Composable
+fun PinDialog(title: String, onDismiss: () -> Unit, onPin: (String) -> String?) {
+    val p = LocalPalette.current
+    var digits by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    fun press(c: Char) {
+        if (digits.length >= 4) return
+        digits += c
+        error = null
+        if (digits.length == 4) {
+            val err = onPin(digits)
+            digits = ""
+            if (err != null) error = err
+        }
+    }
+    Panel(title, onDismiss) {
+        Column(
+            Modifier.onPreviewKeyEvent { ev ->
+                val code = ev.nativeKeyEvent.keyCode
+                if (code in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9) {
+                    if (ev.type == KeyEventType.KeyDown) press('0' + (code - android.view.KeyEvent.KEYCODE_0))
+                    true
+                } else false
+            },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text((0 until 4).joinToString("  ") { if (it < digits.length) "●" else "○" }, fontSize = 34.sp, color = p.onSurface)
+            Text(error ?: "Use the number buttons on your remote, or the keys below", fontSize = 14.sp,
+                color = if (error != null) Color(0xFFFF8A80) else p.muted, modifier = Modifier.padding(vertical = 8.dp))
+            val rows = listOf("123", "456", "789")
+            rows.forEachIndexed { r, row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                    row.forEachIndexed { i, c ->
+                        AppOutlinedButton(onClick = { press(c) }, modifier = Modifier.width(96.dp).then(if (r == 0 && i == 0) Modifier.focusRequester(first) else Modifier)) {
+                            Text("$c", fontSize = 20.sp)
+                        }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppOutlinedButton(onClick = onDismiss, modifier = Modifier.width(96.dp)) { Text("Cancel", fontSize = 14.sp) }
+                AppOutlinedButton(onClick = { press('0') }, modifier = Modifier.width(96.dp)) { Text("0", fontSize = 20.sp) }
+                AppOutlinedButton(onClick = { digits = digits.dropLast(1) }, modifier = Modifier.width(96.dp)) { Text("⌫", fontSize = 20.sp) }
+            }
+        }
+    }
+}
+
+/** Asks for a new PIN twice. */
+@Composable
+private fun SetPinDialog(onDismiss: () -> Unit, onSet: (String) -> Unit) {
+    var firstPin by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.key(firstPin) {
+        PinDialog(if (firstPin == null) "Choose a 4-digit PIN" else "Enter the same PIN again", onDismiss) { pin ->
+            when {
+                firstPin == null -> { firstPin = pin; null }
+                pin == firstPin -> { onSet(pin); null }
+                else -> { firstPin = null; "The PINs didn't match. Start again." }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- media controls
+
+@Composable
+fun MediaControlsDialog(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    val info = (NowPlaying.state as? NowPlayingState.Playing)?.info
+    Panel(info?.title?.ifBlank { null } ?: "Now playing", onDismiss) {
+        if (info == null) {
+            Text("Nothing is playing right now.", color = LocalPalette.current.muted)
+            Spacer(Modifier.padding(6.dp))
+            ActionButton("Close", Modifier.focusRequester(first), primary = true, onClick = onDismiss)
+            return@Panel
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionButton(if (info.playing) "Pause" else "Play", Modifier.focusRequester(first), primary = true) { NowPlaying.playPause() }
+            if (info.canSkip) {
+                ActionButton("Next") { NowPlaying.next() }
+                ActionButton("Previous") { NowPlaying.previous() }
+            }
+            ActionButton("Back 10 seconds") { NowPlaying.seekBy(-10_000) }
+            ActionButton("Forward 30 seconds") { NowPlaying.seekBy(30_000) }
+            ActionButton("Open ${Apps.label(ctx, info.pkg)}") { onDismiss(); Apps.launch(ctx, info.pkg) }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- backup & history
+
+@Composable
+private fun RestoreDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    val history = remember { vm.historyEntries() }
+    val backups = remember { vm.backupFiles() }
+    var confirm by remember { mutableStateOf<SavedLayout?>(null) }
+    Panel("Restore a layout", onDismiss, wide = true) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item { SectionLabel("Version history (kept automatically)") }
+            if (history.isEmpty()) item { Text("No earlier versions yet. One is saved each time you finish editing.", color = p.muted, fontSize = 14.sp) }
+            items(history) { h ->
+                val idx = history.indexOf(h)
+                ActionButton(
+                    if (confirm == h) "Press again to restore this version" else "${describeTime(h.time)} · ${h.label}",
+                    if (idx == 0) Modifier.focusRequester(first) else Modifier,
+                ) { if (confirm == h) { vm.restoreFrom(h.file, "an earlier version"); onDismiss() } else confirm = h }
+            }
+            item { SectionLabel("Backup files") }
+            if (backups.isEmpty()) item { Text("No backup files yet. Use \"Save a backup\" first, or copy one to ${Backups.ADB_PATH}", color = p.muted, fontSize = 14.sp) }
+            items(backups) { b ->
+                ActionButton(
+                    if (confirm == b) "Press again to restore this backup" else b.label,
+                    if (history.isEmpty() && backups.indexOf(b) == 0) Modifier.focusRequester(first) else Modifier,
+                ) { if (confirm == b) { vm.restoreFrom(b.file, "a backup"); onDismiss() } else confirm = b }
+            }
+            item { SectionLabel("From the web") }
+            item { TextRow("Layout file address", "", "https://…/canvas-tv.json") { url -> if (url.isNotBlank()) { vm.restoreFromUrl(url); onDismiss() } } }
+            item { Spacer(Modifier.padding(6.dp)); ActionButton("Close", if (history.isEmpty() && backups.isEmpty()) Modifier.focusRequester(first) else Modifier, primary = true, onClick = onDismiss) }
+        }
+    }
+}
+
+
+// ---------------------------------------------------------------- apps: picker, drawer, folder
+
+@Composable
+private fun AppPickerDialog(exclude: Set<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    val ctx = LocalContext.current
+    val apps = remember { Apps.list(ctx).filter { it.pkg !in exclude } }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    Panel("Choose an app", onDismiss) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(apps.size) { i ->
+                val a = apps[i]
+                ActionButton(a.label, if (i == 0) Modifier.focusRequester(first) else Modifier) { onPick(a.pkg) }
+            }
+        }
+    }
+}
+
+/** Every installed app. OK opens it; holding OK offers hide, add to page and app info. */
+@Composable
+fun AppDrawerDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val ctx = LocalContext.current
+    var showHidden by remember { mutableStateOf(false) }
+    val prefs = vm.dashboard.apps
+    val apps = remember(prefs, showHidden) { vm.drawerApps(includeHidden = showHidden) }
+    var menuFor by remember { mutableStateOf<com.canvastv.dashboard.data.AppInfo?>(null) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    Panel("All apps", onDismiss, wide = true) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+            AppOutlinedButton(onClick = { vm.setAppSort(AppSort.entries.after(prefs.sort)) }, modifier = Modifier.focusRequester(first)) { Text("Sort: ${prefs.sort.label}") }
+            AppOutlinedButton(onClick = { showHidden = !showHidden }) { Text(if (showHidden) "Hide hidden apps" else "Show hidden apps (${prefs.hidden.size})") }
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(apps.size) { i ->
+                val a = apps[i]
+                val hidden = a.pkg in prefs.hidden
+                androidx.tv.material3.Surface(
+                    onClick = { onDismiss(); vm.launchApp(a.pkg) },
+                    onLongClick = { menuFor = a },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+                    colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent, contentColor = p.onSurface,
+                        focusedContainerColor = p.onSurface, focusedContentColor = readableOn(p.onSurface),
+                    ),
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val art = remember(a.pkg) { Apps.art(ctx, a.pkg) }
+                        Box(Modifier.width(72.dp).heightIn(max = 40.dp)) {
+                            if (art != null) androidx.compose.foundation.Image(art.first, null, Modifier.fillMaxWidth())
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(a.label + (if (hidden) "  (hidden)" else "") + (if (!a.isTvApp) "  · phone app" else ""), fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        Text("Hold OK on an app to hide it, add it to this page, or open its settings.", fontSize = 12.sp, color = p.muted, modifier = Modifier.padding(top = 8.dp))
+    }
+    menuFor?.let { a ->
+        val hidden = a.pkg in prefs.hidden
+        Panel(a.label, onDismiss = { menuFor = null }) {
+            val f2 = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { f2.requestFocus() } }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton("Open", Modifier.focusRequester(f2), primary = true) { menuFor = null; onDismiss(); vm.launchApp(a.pkg) }
+                ActionButton(if (hidden) "Show in the drawer again" else "Hide from the drawer") { vm.setAppHidden(a.pkg, !hidden); menuFor = null }
+                ActionButton("Add to this page") { vm.guard { if (vm.addAppTile(a.pkg)) vm.message = "Added ${a.label} to this page" }; menuFor = null }
+                ActionButton("App info (storage, permissions, uninstall)") {
+                    menuFor = null
+                    runCatching {
+                        ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${a.pkg}")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }.onFailure { vm.message = "This TV doesn't allow opening app info from here" }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FolderDialog(vm: DashboardViewModel, tile: Tile, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val pkgs = folderApps(tile).filter { Apps.isInstalled(ctx, it) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    Panel(tile.cfg("name").ifBlank { "Folder" }, onDismiss) {
+        if (pkgs.isEmpty()) {
+            Text("This folder is empty. Add apps with Configure in edit mode.", color = LocalPalette.current.muted)
+            Spacer(Modifier.padding(6.dp))
+            ActionButton("Close", Modifier.focusRequester(first), primary = true, onClick = onDismiss)
+            return@Panel
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(pkgs.size) { i ->
+                ActionButton(Apps.label(ctx, pkgs[i]), if (i == 0) Modifier.focusRequester(first) else Modifier) { onDismiss(); vm.launchApp(pkgs[i]) }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun RefreshRow(tile: Tile, options: List<String>, default: String, onChange: (Tile) -> Unit, modifier: Modifier = Modifier, label: String = "Refresh every") {
+    val cur = tile.cfg("refreshMin", default).takeIf { it in options } ?: default
+    CycleRow(label, "$cur min", { onChange(tile.withCfg("refreshMin", options.after(cur))) }, modifier)
+}
