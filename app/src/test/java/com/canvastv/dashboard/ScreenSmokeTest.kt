@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.lifecycle.ViewModelProvider
 import com.canvastv.dashboard.data.DashboardViewModel
 import com.canvastv.dashboard.model.Dashboard
@@ -112,6 +113,16 @@ class ScreenSmokeTest {
         assertTrue(vm.editing)
         onMain { vm.stopEditing() }
         assertTrue(rule.onAllNodesWithText("Enter PIN to edit").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun `a text box stays open for typing after OK`() {
+        rule.onNodeWithText("Settings").performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+        rule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Name of this page"))
+        // The page-name box shows the page's name; the second "Home" on screen is the box (the first is the page tab).
+        rule.onAllNodesWithText("Home")[1].performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+        rule.onNode(hasSetTextAction()).assertExists()
     }
 
     @Test fun `history keeps a version after editing`() {

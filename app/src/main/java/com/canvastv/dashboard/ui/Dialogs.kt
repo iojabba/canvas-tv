@@ -119,6 +119,8 @@ private fun TextRow(label: String, initial: String, hint: String = "", secret: B
     var typing by remember { mutableStateOf(false) }
     // Only a real loss of focus ends typing, not the "not focused yet" report the field gives when it first appears.
     var fieldFocused by remember { mutableStateOf(false) }
+    // The OK press that starts typing lifts its key over the new field; only an OK pressed in the field finishes it.
+    var okDownInField by remember { mutableStateOf(false) }
     val field = remember { FocusRequester() }
     val button = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -126,6 +128,7 @@ private fun TextRow(label: String, initial: String, hint: String = "", secret: B
         if (!typing) return
         typing = false
         fieldFocused = false
+        okDownInField = false
         keyboard?.hide()
         // An emptied secret keeps the saved one; there's a separate button to forget it.
         if (secret && value.isBlank()) { value = initial; return }
@@ -175,8 +178,12 @@ private fun TextRow(label: String, initial: String, hint: String = "", secret: B
                     modifier = Modifier.fillMaxWidth().focusRequester(field)
                         .onPreviewKeyEvent { ev ->
                             val code = ev.nativeKeyEvent.keyCode
-                            if ((code == android.view.KeyEvent.KEYCODE_BACK || code == android.view.KeyEvent.KEYCODE_DPAD_CENTER) && ev.type == KeyEventType.KeyUp) { finish(); true }
-                            else code == android.view.KeyEvent.KEYCODE_BACK
+                            when {
+                                code == android.view.KeyEvent.KEYCODE_DPAD_CENTER && ev.type == KeyEventType.KeyDown -> { okDownInField = true; true }
+                                code == android.view.KeyEvent.KEYCODE_DPAD_CENTER && ev.type == KeyEventType.KeyUp -> { if (okDownInField) finish(); true }
+                                code == android.view.KeyEvent.KEYCODE_BACK && ev.type == KeyEventType.KeyUp -> { finish(); true }
+                                else -> code == android.view.KeyEvent.KEYCODE_BACK
+                            }
                         }
                         .onFocusChanged {
                             if (it.isFocused) fieldFocused = true
