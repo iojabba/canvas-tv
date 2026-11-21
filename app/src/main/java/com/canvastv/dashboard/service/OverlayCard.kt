@@ -60,7 +60,10 @@ fun OverlayCard() {
                     val place = spec.weatherPlace.ifBlank {
                         d.pages.flatMap { it.tiles }.firstOrNull { it.type == TileType.WEATHER && it.cfg("place").isNotBlank() }?.cfg("place").orEmpty()
                     }
-                    if (place.isNotBlank()) {
+                    if (place.isBlank()) {
+                        Spacer(Modifier.size(14.dp))
+                        Text("Set a city in Settings", fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f))
+                    } else {
                         val f = spec.fahrenheit
                         // Same cache key as the weather tile, so they share one download.
                         val data by rememberRemoteData("weather:$place:$f", 30 * 60_000L) { fetchWeather(place, f) }
