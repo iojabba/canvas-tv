@@ -71,6 +71,9 @@ interface CompanionApi {
     fun showPage(index: Int): String?
     fun appsJson(): String
     fun inputsJson(): String
+    /** Blank or null leaves that part as it is. Returns null on success or an error message. */
+    fun setHomeAssistantFromWeb(url: String?, token: String?): String?
+    fun homeAssistantJson(): String
 }
 
 /**
@@ -248,6 +251,11 @@ object CompanionServer {
                 val token = newToken()
                 prefs.edit().putStringSet("tokens", (tokens() + token).toList().takeLast(10).toSet()).apply()
                 ok(c, """{"ok":true,"token":"$token"}""")
+            }
+            r.method == "GET" && r.path == "/api/homeassistant" -> ok(c, onMain { a.homeAssistantJson() } ?: "{}")
+            r.method == "POST" && r.path == "/api/homeassistant" -> {
+                val b = body() ?: return err(c, 400, "Expected JSON")
+                result(c, onMain { a.setHomeAssistantFromWeb(b.str("url"), b.str("token")) })
             }
             r.method == "DELETE" && r.path == "/api/message" -> { main.post { Messages.clear() }; ok(c) }
             r.path == "/api/page" && (r.method == "POST" || r.method == "GET") -> {

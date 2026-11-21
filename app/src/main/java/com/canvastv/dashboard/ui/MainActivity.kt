@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         handleAdminExtras(intent)
+        com.canvastv.dashboard.service.CanvasService.sync(this)
         setContent {
             DashboardTheme(vm.effectiveTheme()) {
                 val full = vm.fullScreenTile
@@ -40,8 +41,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** PIN recovery from a computer: adb shell am start -n …/.ui.MainActivity --ez clearPin true */
+    override fun onStart() { super.onStart(); com.canvastv.dashboard.service.DashboardVisibility.shown() }
+    override fun onStop() { com.canvastv.dashboard.service.DashboardVisibility.hidden(); super.onStop() }
+
+    /**
+     * Set-up from a computer, for things that are painful to type with a remote:
+     *  PIN recovery: --ez clearPin true
+     *  Home Assistant: --es haUrl http://192.168.1.20:8123 --es haToken <long-lived token>
+     */
     private fun handleAdminExtras(intent: Intent?) {
+        val haUrl = intent?.getStringExtra("haUrl")
+        val haToken = intent?.getStringExtra("haToken")
+        if (haUrl != null || haToken != null) {
+            val cur = vm.dashboard.homeAssistant
+            vm.setHomeAssistant(cur.copy(url = haUrl?.trim() ?: cur.url, token = haToken?.trim() ?: cur.token))
+            intent.removeExtra("haUrl"); intent.removeExtra("haToken")
+            vm.message = "Home Assistant settings saved"
+        }
         if (intent?.getBooleanExtra("clearPin", false) == true && vm.dashboard.pinHash != null) {
             vm.setPin(null)
             intent.removeExtra("clearPin")

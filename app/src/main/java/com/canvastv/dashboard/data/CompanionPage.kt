@@ -46,6 +46,12 @@ document.getElementById('code').addEventListener('keydown',e=>{if(e.key==='Enter
 <select id="newType"></select><div class="row"><button class="primary" onclick="addTile()">Add</button></div>
 <p class="muted">It goes in the first free spot. Move and resize it with the remote in edit mode.</p></div>
 
+<h2>Home Assistant</h2>
+<div class="card"><p class="muted">For the Home Assistant tile. In Home Assistant open your profile → Security → Long-lived access tokens → Create token, then paste it here. The token stays on the TV and isn't shown again.</p>
+<label>Server address</label><input id="haUrl" placeholder="http://192.168.1.20:8123">
+<label>Long-lived access token <span id="haHas" class="tag"></span></label><input id="haToken" type="password" autocomplete="off" placeholder="Paste the token">
+<div class="row"><button class="primary" onclick="saveHa()">Save</button></div></div>
+
 <h2>Backup</h2>
 <div class="card"><div class="row"><a href="/api/layout?download=1"><button>Download the layout</button></a>
 <label style="margin:0"><input type="file" id="upload" accept=".json,application/json" style="display:none" onchange="restore(this.files[0])"><span class="tag"></span></label>
@@ -68,10 +74,11 @@ COUNTDOWN:['label','date:YYYY-MM-DD','time:HH:MM (optional)','yearly:true/false'
 WEATHER:['place:City, State','units:F or C','refreshMin'],NEWS:['urls*:feed addresses, comma separated','title','style:list or ticker','refreshMin'],
 TICKER:['symbols:AAPL, MSFT, BTC, ETH','refreshMin'],CALENDAR:['icsUrls*:private iCal addresses, comma separated','title','days','refreshMin'],
 PHOTOS:['sources*:picture or feed addresses, comma separated','seconds','shuffle:true/false','fit:fill or fit'],
-WEB:['url','title','zoom:percent','refreshMin','js:true/false'],MESSAGES:['title'],APP_DRAWER:['label']};
+WEB:['url','title','zoom:percent','refreshMin','js:true/false'],MESSAGES:['title'],APP_DRAWER:['label'],
+HOME_ASSISTANT:['entities*:light.kitchen, scene.movie_time','title','refreshSec']};
 const LABELS={CLOCK:'Clock',APP:'App shortcut',HDMI:'HDMI input',STATS:'System stats',NOTE:'Note',VIDEO:'Video stream',NOW_PLAYING:'Now playing',
 COUNTDOWN:'Countdown',APP_DRAWER:'All apps',FOLDER:'App folder',WEATHER:'Weather',NEWS:'News / RSS',TICKER:'Stocks & crypto',CALENDAR:'Calendar',
-PHOTOS:'Photo slideshow',WEB:'Web page',SPEEDTEST:'Speed test',MESSAGES:'Message board'};
+PHOTOS:'Photo slideshow',WEB:'Web page',SPEEDTEST:'Speed test',MESSAGES:'Message board',HOME_ASSISTANT:'Home Assistant'};
 let layout=null,page=0,apps=[];
 const el=id=>document.getElementById(id);
 function toast(t){const e=el('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2500)}
@@ -114,10 +121,13 @@ async function restore(file){if(!file)return;const text=await file.text();
   try{await api('/api/layout',{method:'PUT',body:text});toast('Layout restored');load()}catch(e){toast(e.message)}}
 async function saveRaw(){try{JSON.parse(el('raw').value)}catch(e){toast('That isn\'t valid JSON');return}
   try{await api('/api/layout',{method:'PUT',body:el('raw').value});toast('Saved');load()}catch(e){toast(e.message)}}
+async function loadHa(){try{const h=await api('/api/homeassistant');el('haUrl').value=h.url||'';el('haHas').textContent=h.hasToken?'(one is saved; leave blank to keep it)':''}catch(e){}}
+async function saveHa(){try{await api('/api/homeassistant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:el('haUrl').value.trim(),token:el('haToken').value.trim()})});
+  el('haToken').value='';toast('Saved on the TV');loadHa()}catch(e){toast(e.message)}}
 async function newToken(){try{const j=await api('/api/token',{method:'POST'});el('token').textContent=j.token}catch(e){toast(e.message)}}
 el('cmds').innerHTML='Message: curl -X POST '+location.origin+'/api/message -H "Authorization: Bearer TOKEN" -d \'{"text":"Doorbell"}\'<br><br>'
  +'Change page: curl -X POST '+location.origin+'/api/page -H "Authorization: Bearer TOKEN" -d \'{"page":2}\'<br><br>'
  +'Replace TOKEN with one made by the button below. Each token keeps working until you choose "Forget paired phones" on the TV.';
-load().catch(e=>toast(e.message));
+load().catch(e=>toast(e.message));loadHa();
 </script></body></html>"""
 }

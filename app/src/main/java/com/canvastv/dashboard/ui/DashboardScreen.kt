@@ -62,6 +62,7 @@ import com.canvastv.dashboard.model.Tile
 import com.canvastv.dashboard.model.TileType
 import com.canvastv.dashboard.ui.tiles.TileContent
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private sealed interface DialogState {
     data class Actions(val tileId: String) : DialogState
@@ -71,6 +72,7 @@ private sealed interface DialogState {
     data object Media : DialogState
     data object Drawer : DialogState
     data class Folder(val tileId: String) : DialogState
+    data class HomeAssistant(val tileId: String) : DialogState
 }
 
 @Composable
@@ -202,6 +204,14 @@ fun DashboardScreen(vm: DashboardViewModel) {
                                     TileType.HDMI, TileType.VIDEO -> vm.fullScreenTile = tile
                                     TileType.NOW_PLAYING -> NowPlaying.playPause()
                                     TileType.SPEEDTEST -> com.canvastv.dashboard.data.SpeedTest.run(ctx, scope)
+                                    TileType.HOME_ASSISTANT -> {
+                                        val quick = com.canvastv.dashboard.ui.tiles.haQuickEntity(ctx, tile)
+                                        if (quick == null) dialog = DialogState.HomeAssistant(tile.id)
+                                        else scope.launch {
+                                            runCatching { com.canvastv.dashboard.data.HomeAssistant.activate(d.homeAssistant, quick) }
+                                                .onFailure { vm.message = "Home Assistant didn't respond (${it.message})" }
+                                        }
+                                    }
                                     else -> vm.message = "Long-press OK (or press Menu) to edit tiles"
                                 }
                             },
@@ -261,6 +271,7 @@ fun DashboardScreen(vm: DashboardViewModel) {
         DialogState.Media -> MediaControlsDialog(onDismiss = { dialog = null })
         DialogState.Drawer -> AppDrawerDialog(vm, onDismiss = { dialog = null })
         is DialogState.Folder -> vm.tile(dl.tileId)?.let { t -> FolderDialog(vm, t, onDismiss = { dialog = null }) } ?: run { dialog = null }
+        is DialogState.HomeAssistant -> vm.tile(dl.tileId)?.let { t -> HomeAssistantDialog(t, onDismiss = { dialog = null }) } ?: run { dialog = null }
     }
 
     if (vm.pinRequest != null) PinDialog(title = "Enter PIN to edit", onDismiss = vm::cancelPin, onPin = vm::submitPin)
@@ -382,6 +393,7 @@ private fun describeTile(ctx: android.content.Context, t: Tile): String = when (
     TileType.WEATHER -> "Weather for ${t.cfg("place")}"
     TileType.NEWS -> "News headlines"
     TileType.MESSAGES -> "Message board"
+    TileType.HOME_ASSISTANT -> "Home Assistant controls. Press OK to use them"
     TileType.TICKER -> "Stock and crypto prices"
     TileType.CALENDAR -> "Calendar"
     TileType.PHOTOS -> "Photo slideshow"

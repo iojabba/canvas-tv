@@ -45,6 +45,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Button
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
+import kotlinx.coroutines.launch
 import com.canvastv.dashboard.BuildConfigInfo
 import com.canvastv.dashboard.data.Apps
 import com.canvastv.dashboard.data.DashboardViewModel
@@ -112,7 +113,7 @@ private fun SectionLabel(text: String) {
  * OK starts typing, and the keyboard's Done (or Back) saves and closes the keyboard.
  */
 @Composable
-private fun TextRow(label: String, initial: String, hint: String = "", onDone: (String) -> Unit) {
+private fun TextRow(label: String, initial: String, hint: String = "", secret: Boolean = false, onDone: (String) -> Unit) {
     val p = LocalPalette.current
     var value by remember(initial) { mutableStateOf(initial) }
     var typing by remember { mutableStateOf(false) }
@@ -123,10 +124,12 @@ private fun TextRow(label: String, initial: String, hint: String = "", onDone: (
         if (!typing) return
         typing = false
         keyboard?.hide()
+        // An emptied secret keeps the saved one; there's a separate button to forget it.
+        if (secret && value.isBlank()) { value = initial; return }
         onDone(value.trim())
     }
     LaunchedEffect(typing) {
-        if (typing) { runCatching { field.requestFocus() }; keyboard?.show() } else runCatching { button.requestFocus() }
+        if (typing) { if (secret) value = ""; runCatching { field.requestFocus() }; keyboard?.show() } else runCatching { button.requestFocus() }
     }
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(label, fontSize = 14.sp, color = p.muted)
@@ -145,7 +148,7 @@ private fun TextRow(label: String, initial: String, hint: String = "", onDone: (
                 scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1f),
             ) {
                 Text(
-                    value.ifEmpty { hint.ifEmpty { "Press OK to type" } },
+                    if (secret && value.isNotEmpty()) "Saved (${value.length} characters) · press OK to replace" else value.ifEmpty { hint.ifEmpty { "Press OK to type" } },
                     fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     color = if (value.isEmpty()) p.muted else Color.Unspecified,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -234,6 +237,7 @@ fun tileTitle(ctx: android.content.Context, t: Tile): String = when (t.type) {
     TileType.COUNTDOWN -> t.cfg("label").ifBlank { "Countdown" }
     TileType.WEATHER -> t.cfg("place").ifBlank { "Weather" }
     TileType.CLOCK -> t.cfg("city").ifBlank { "Clock" }
+    TileType.HOME_ASSISTANT -> t.cfg("title").ifBlank { "Home Assistant" }
     else -> t.type.label
 }.let { if (it == t.type.label) it else "$it · ${t.type.label}" }
 
@@ -299,6 +303,8 @@ fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> U
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     fun set(k: String, v: String) = onChange(tile.withCfg(k, v))
     fun yesNo(b: Boolean) = if (b) "On" else "Off"
+    var pickingHa by remember { mutableStateOf(false) }
+    if (pickingHa) { HaPickerDialog(tile, onChange, onDismiss = { pickingHa = false }); return }
     Panel("Configure ${tile.type.label.lowercase()}", onDismiss, wide = true) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             item { SectionLabel("Content") }
@@ -448,6 +454,17 @@ fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> U
                     item { TextRow("Title", tile.cfg("title"), "Messages") { set("title", it) } }
                     item { Text("Shows messages sent from the phone page or web commands (Settings → Phone setup).", color = LocalPalette.current.muted, fontSize = 13.sp, modifier = Modifier.focusRequester(first)) }
                 }
+                TileType.HOME_ASSISTANT -> {
+                    item { ActionButton("Choose devices… (${com.canvastv.dashboard.ui.tiles.haIds(tile).size} chosen)", Modifier.focusRequester(first), primary = true) { pickingHa = true } }
+                    item { TextRow("Entity IDs (comma separated)", tile.cfg("entities"), "light.living_room, scene.movie_time") { set("entities", it) } }
+                    item { TextRow("Title", tile.cfg("title"), "Home") { set("title", it) } }
+                    item {
+                        val secs = listOf("10", "30", "60", "300")
+                        val cur = tile.cfg("refreshSec", "30").takeIf { it in secs } ?: "30"
+                        CycleRow("Refresh every", "$cur s", { set("refreshSec", secs.after(cur)) })
+                    }
+                    item { Text("OK on the tile opens its controls. A tile with one light, switch or scene toggles it directly. Locks and garage doors always ask twice. The server address and token are in Settings → Home Assistant.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+                }
                 TileType.SPEEDTEST -> item { Text("Uses Cloudflare's speed test servers (about 30 MB per test). Press OK on the tile to run it.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
                 TileType.NOW_PLAYING -> item { Text("Shows what's playing on the TV. OK plays or pauses; hold OK for more controls.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
                 TileType.STATS -> item { Text("Shows memory, storage, network speed, IP address and uptime.", color = LocalPalette.current.muted, modifier = Modifier.focusRequester(first)) }
@@ -573,6 +590,51 @@ fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
                 }
             }
 
+            item { SectionLabel("Startup and overlay") }
+            item { CycleRow("Open Canvas TV when the TV turns on", if (d.openOnStartup) "On" else "Off", { vm.setOpenOnStartup(!d.openOnStartup) }) }
+            item { CycleRow("Overlay over other apps", d.overlay.mode.label, { vm.setOverlay(d.overlay.copy(mode = com.canvastv.dashboard.model.OverlayMode.entries.after(d.overlay.mode))) }) }
+            if (d.overlay.mode != com.canvastv.dashboard.model.OverlayMode.OFF) {
+                item { CycleRow("Overlay corner", d.overlay.corner.label, { vm.setOverlay(d.overlay.copy(corner = com.canvastv.dashboard.model.Corner.entries.after(d.overlay.corner))) }) }
+                item {
+                    val ops = listOf(0.5f, 0.65f, 0.8f, 0.95f)
+                    CycleRow("Overlay opacity", "${(d.overlay.opacity * 100).toInt()}%", { vm.setOverlay(d.overlay.copy(opacity = ops.after(ops.minBy { kotlin.math.abs(it - d.overlay.opacity) }))) })
+                }
+                if (d.overlay.mode == com.canvastv.dashboard.model.OverlayMode.CLOCK_WEATHER) {
+                    item { TextRow("Overlay weather city", d.overlay.weatherPlace, "Uses your weather tile's city") { vm.setOverlay(d.overlay.copy(weatherPlace = it)) } }
+                    item { CycleRow("Overlay temperature", if (d.overlay.fahrenheit) "°F" else "°C", { vm.setOverlay(d.overlay.copy(fahrenheit = !d.overlay.fahrenheit)) }) }
+                }
+            }
+            item {
+                val ctx = LocalContext.current
+                val p = LocalPalette.current
+                val needs = d.openOnStartup || d.overlay.mode != com.canvastv.dashboard.model.OverlayMode.OFF
+                val allowed = remember(d.openOnStartup, d.overlay.mode) { android.provider.Settings.canDrawOverlays(ctx) }
+                Column {
+                    Text("The overlay shows a small card over other apps and is hidden while the dashboard is open. New messages from your phone pop up on it.", color = p.muted, fontSize = 13.sp)
+                    if (needs && !allowed) {
+                        Text("Needs the \"display over other apps\" permission, which this TV only grants from a computer:", color = Color(0xFFFFB74D), fontSize = 13.sp)
+                        Text("adb shell appops set com.canvastv.dashboard SYSTEM_ALERT_WINDOW allow", color = if (p.dark) Color(0xFF9EE493) else Color(0xFF1B6E2A), fontSize = 12.sp)
+                    }
+                }
+            }
+
+            item { SectionLabel("Home Assistant") }
+            item { TextRow("Server address", d.homeAssistant.url, "http://192.168.1.20:8123") { vm.setHomeAssistant(d.homeAssistant.copy(url = it)) } }
+            item { TextRow("Long-lived access token", d.homeAssistant.token, "From your Home Assistant profile → Security", secret = true) { vm.setHomeAssistant(d.homeAssistant.copy(token = it)) } }
+            if (d.homeAssistant.configured) item {
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                var result by remember { mutableStateOf<String?>(null) }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton("Test connection") {
+                        result = "Checking…"
+                        scope.launch { result = com.canvastv.dashboard.data.HomeAssistant.test(d.homeAssistant) ?: "Connected to Home Assistant" }
+                    }
+                    result?.let { Text(it, color = LocalPalette.current.onSurface, fontSize = 14.sp) }
+                    ActionButton("Forget the token") { vm.setHomeAssistant(d.homeAssistant.copy(token = "")) }
+                }
+            }
+            item { Text("The token is a long string, so it's easiest to paste from the phone setup page or from a computer (see About). It stays on this TV and isn't shown to phones.", color = LocalPalette.current.muted, fontSize = 13.sp) }
+
             item { SectionLabel("Phone setup") }
             item { CycleRow("Set up from a phone or computer", if (d.phoneSetup) "On" else "Off", { vm.setPhoneSetup(!d.phoneSetup) }) }
             if (d.phoneSetup) item {
@@ -627,6 +689,8 @@ fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
                     Text("adb shell cmd package set-home-activity com.canvastv.dashboard/.ui.MainActivity", color = cmd, fontSize = 12.sp)
                     Text("To let the Now Playing tile see what's playing, run once:", color = p.muted, fontSize = 13.sp)
                     Text("adb shell cmd notification allow_listener com.canvastv.dashboard/com.canvastv.dashboard.data.MediaListener", color = cmd, fontSize = 12.sp)
+                    Text("To set up Home Assistant from a computer, run:", color = p.muted, fontSize = 13.sp)
+                    Text("adb shell am start -n com.canvastv.dashboard/.ui.MainActivity --es haUrl http://IP:8123 --es haToken TOKEN", color = cmd, fontSize = 12.sp)
                     Text("Forgot the edit PIN? Run:", color = p.muted, fontSize = 13.sp)
                     Text("adb shell am start -n com.canvastv.dashboard/.ui.MainActivity --ez clearPin true", color = cmd, fontSize = 12.sp)
                 }
@@ -890,4 +954,82 @@ fun FolderDialog(vm: DashboardViewModel, tile: Tile, onDismiss: () -> Unit) {
 private fun RefreshRow(tile: Tile, options: List<String>, default: String, onChange: (Tile) -> Unit, modifier: Modifier = Modifier, label: String = "Refresh every") {
     val cur = tile.cfg("refreshMin", default).takeIf { it in options } ?: default
     CycleRow(label, "$cur min", { onChange(tile.withCfg("refreshMin", options.after(cur))) }, modifier)
+}
+
+// ---------------------------------------------------------------- Home Assistant
+
+/** Every chosen device as a button: OK runs its action. Locks and doors need a second press. */
+@Composable
+fun HomeAssistantDialog(tile: Tile, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val server = com.canvastv.dashboard.ui.tiles.haServer()
+    val ids = com.canvastv.dashboard.ui.tiles.haIds(tile)
+    val data by com.canvastv.dashboard.ui.tiles.rememberHaStates(server, ids, 5_000L)
+    val list = data?.text?.let { com.canvastv.dashboard.data.parseHaStates(it, ids) }.orEmpty()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var confirm by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(list.isNotEmpty()) { runCatching { first.requestFocus() } }
+    Panel(tile.cfg("title").ifBlank { "Home" }, onDismiss) {
+        if (!server.configured) Text("Add your Home Assistant address and token in Settings first.", color = p.muted)
+        else if (list.isEmpty()) Text(if (data?.error != null) "Couldn't reach Home Assistant (${data?.error})" else "Loading…", color = p.muted)
+        error?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 14.sp) }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(list.size) { i ->
+                val e = list[i]
+                val action = e.action
+                val label = when {
+                    action == null -> "${e.name}: ${e.display}"
+                    confirm == e.id -> "Press again to ${action.lowercase()} ${e.name}"
+                    else -> "${e.name}: ${e.display}  ·  $action"
+                }
+                ActionButton(label, if (i == 0) Modifier.focusRequester(first) else Modifier) {
+                    if (action == null) return@ActionButton
+                    if (e.needsConfirm && confirm != e.id) { confirm = e.id; return@ActionButton }
+                    confirm = null
+                    scope.launch {
+                        error = runCatching { com.canvastv.dashboard.data.HomeAssistant.activate(server, e) }.exceptionOrNull()?.let { "Didn't work: ${it.message}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Lists what Home Assistant has, so devices can be chosen with the remote instead of typed. */
+@Composable
+private fun HaPickerDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val server = com.canvastv.dashboard.ui.tiles.haServer()
+    val all by androidx.compose.runtime.produceState<Result<List<com.canvastv.dashboard.data.HaEntity>>?>(null, server) {
+        value = if (!server.configured) Result.failure(IllegalStateException("Add your Home Assistant address and token in Settings first."))
+        else runCatching { com.canvastv.dashboard.data.HomeAssistant.listAll(server) }
+    }
+    val chosen = com.canvastv.dashboard.ui.tiles.haIds(tile)
+    val first = remember { FocusRequester() }
+    LaunchedEffect(all != null) { runCatching { first.requestFocus() } }
+    Panel("Choose devices", onDismiss, wide = true) {
+        val r = all
+        when {
+            r == null -> Text("Loading from Home Assistant…", color = p.muted)
+            r.isFailure -> { Text(r.exceptionOrNull()?.message ?: "Couldn't load", color = Color(0xFFFF8A80)); ActionButton("Back", Modifier.focusRequester(first), onClick = onDismiss) }
+            else -> {
+                val list = r.getOrThrow()
+                Text("${chosen.size} chosen. OK adds or removes; they show in the order you add them.", color = p.muted, fontSize = 13.sp)
+                Spacer(Modifier.padding(4.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item { ActionButton("Done", Modifier.focusRequester(first), primary = true, onClick = onDismiss) }
+                    items(list.size) { i ->
+                        val e = list[i]
+                        val on = e.id in chosen
+                        ActionButton((if (on) "✓  " else "     ") + "${e.name}  (${e.id})") {
+                            val next = if (on) chosen - e.id else chosen + e.id
+                            onChange(tile.withCfg("entities", next.joinToString(", ")))
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

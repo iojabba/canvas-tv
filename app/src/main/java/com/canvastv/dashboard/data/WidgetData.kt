@@ -44,12 +44,27 @@ object WidgetCache {
 }
 
 /** Plain GET with sane timeouts. Throws on HTTP errors. */
-suspend fun httpGet(url: String): String = withContext(Dispatchers.IO) {
+suspend fun httpGet(url: String): String = httpRequest(url)
+
+/** An HTTP call with optional headers and a JSON body. Throws on HTTP errors. */
+suspend fun httpRequest(
+    url: String,
+    method: String = "GET",
+    headers: Map<String, String> = emptyMap(),
+    body: String? = null,
+): String = withContext(Dispatchers.IO) {
     val c = URL(url).openConnection() as HttpURLConnection
     c.connectTimeout = 8000
     c.readTimeout = 10000
-    c.setRequestProperty("User-Agent", "CanvasTV/0.3")
+    c.requestMethod = method
+    c.setRequestProperty("User-Agent", "CanvasTV/0.6")
+    headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
     try {
+        if (body != null) {
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toByteArray()) }
+        }
         if (c.responseCode !in 200..299) error("HTTP ${c.responseCode}")
         c.inputStream.bufferedReader().readText()
     } finally {

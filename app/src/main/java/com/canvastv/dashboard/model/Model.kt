@@ -20,6 +20,12 @@ data class Dashboard(
     val pinHash: String? = null,
     /** Lets phones on the same Wi-Fi open the setup page (after pairing with a code). */
     val phoneSetup: Boolean = false,
+    /** Bring the dashboard up when the TV is switched on (cold boot or waking from standby). */
+    val openOnStartup: Boolean = false,
+    /** A small card shown over other apps: clock, weather and incoming messages. */
+    val overlay: OverlaySpec = OverlaySpec(),
+    /** One Home Assistant server shared by every Home Assistant tile. */
+    val homeAssistant: HaServer = HaServer(),
     val theme: ThemeSpec = ThemeSpec(),
     val apps: AppPrefs = AppPrefs(),
     val pages: List<Page> = listOf(Page(name = "Home")),
@@ -71,6 +77,35 @@ enum class TileType(val label: String, val defaultW: Int, val defaultH: Int) {
     WEB("Web page", 4, 3),
     SPEEDTEST("Speed test", 3, 2),
     MESSAGES("Message board", 4, 2),
+    HOME_ASSISTANT("Home Assistant", 4, 2),
+}
+
+@Serializable
+enum class OverlayMode(val label: String) {
+    OFF("Off"), MESSAGES("Messages only"), CLOCK("Clock and messages"), CLOCK_WEATHER("Clock, weather and messages")
+}
+
+@Serializable
+enum class Corner(val label: String) { TOP_RIGHT("Top right"), TOP_LEFT("Top left"), BOTTOM_RIGHT("Bottom right"), BOTTOM_LEFT("Bottom left") }
+
+@Serializable
+data class OverlaySpec(
+    val mode: OverlayMode = OverlayMode.OFF,
+    val corner: Corner = Corner.TOP_RIGHT,
+    /** City for the overlay's weather; blank uses the first weather tile's city. */
+    val weatherPlace: String = "",
+    val fahrenheit: Boolean = true,
+    val opacity: Float = 0.8f,
+)
+
+@Serializable
+data class HaServer(
+    /** Like http://192.168.1.20:8123 */
+    val url: String = "",
+    /** A long-lived access token from the Home Assistant profile page. Never sent to phones. */
+    val token: String = "",
+) {
+    val configured: Boolean get() = url.isNotBlank() && token.isNotBlank()
 }
 
 /** How the app drawer lists apps, which ones it hides, and which were opened recently. */

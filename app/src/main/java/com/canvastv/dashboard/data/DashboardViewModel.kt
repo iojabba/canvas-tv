@@ -42,6 +42,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
     private val shared: androidx.compose.runtime.MutableState<Dashboard> =
         synchronized(Companion) { sharedLayout ?: mutableStateOf(load()).also { sharedLayout = it } }
 
+    /** Settings that the background service acts on. */
+    fun setOpenOnStartup(on: Boolean) { update { it.copy(openOnStartup = on) }; com.canvastv.dashboard.service.CanvasService.sync(getApplication()) }
+    fun setOverlay(o: com.canvastv.dashboard.model.OverlaySpec) { update { it.copy(overlay = o) }; com.canvastv.dashboard.service.CanvasService.sync(getApplication()) }
+    fun setHomeAssistant(h: com.canvastv.dashboard.model.HaServer) = update { it.copy(homeAssistant = h) }
+
     var dashboard: Dashboard
         get() = shared.value
         private set(v) { shared.value = v }
@@ -218,7 +223,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
     private fun restore(d: Dashboard, what: String) {
         History.save(getApplication(), json, dashboard, "Before restoring $what")
         // Keep this TV's PIN: a backup shouldn't be able to lock or unlock it.
-        update { sanitize(d).copy(pinHash = it.pinHash) }
+        // A layout without a Home Assistant token (like one from the phone page) keeps this TV's.
+        update { cur ->
+            val ha = if (d.homeAssistant.token.isBlank()) d.homeAssistant.copy(token = cur.homeAssistant.token) else d.homeAssistant
+            sanitize(d).copy(pinHash = cur.pinHash, homeAssistant = ha)
+        }
+        com.canvastv.dashboard.service.CanvasService.sync(getApplication())
         pageIndex = 0
         message = "Layout restored"
     }
@@ -310,7 +320,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
     private val webJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     /** The layout as the phone sees it: the PIN hash never leaves the TV. */
-    override fun layoutJson(): String = webJson.encodeToString(Dashboard.serializer(), dashboard.copy(pinHash = null))
+    override fun layoutJson(): String = webJson.encodeToString(Dashboard.serializer(), dashboard.copy(pinHash = null, homeAssistant = dashboard.homeAssistant.copy(token = "")))
 
     override fun replaceLayoutJson(text: String): String? {
         val d = decode(text) ?: return "That isn't a Canvas TV layout"
@@ -364,6 +374,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
         kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.MapSerializer(String.serializer(), String.serializer())),
         runCatching { Apps.list(getApplication()) }.getOrDefault(emptyList()).map { mapOf("pkg" to it.pkg, "label" to it.label) },
     )
+
+    override fun setHomeAssistantFromWeb(url: String?, token: String?): String? {
+        val u = url?.trim().orEmpty()
+        if (u.isNotEmpty() && !u.startsWith("http://") && !u.startsWith("https://")) return "The address should start with http:// or https://"
+        val cur = dashboard.homeAssistant
+        setHomeAssistant(cur.copy(url = u.ifEmpty { cur.url }, token = token?.trim().orEmpty().ifEmpty { cur.token }))
+        return null
+    }
+
+    /** Never includes the token itself. */
+    override fun homeAssistantJson(): String = kotlinx.serialization.json.buildJsonObject {
+        put("url", kotlinx.serialization.json.JsonPrimitive(dashboard.homeAssistant.url))
+        put("hasToken", kotlinx.serialization.json.JsonPrimitive(dashboard.homeAssistant.token.isNotBlank()))
+    }.toString()
 
     override fun inputsJson(): String = webJson.encodeToString(
         kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.MapSerializer(String.serializer(), String.serializer())),
@@ -501,6 +525,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
         private var sharedLayout: androidx.compose.runtime.MutableState<Dashboard>? = null
         private var saveJob: Job? = null
         private val saveScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+        private val lenientJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+        /**
+         * The saved layout for code outside the dashboard screen (the startup receiver and the
+         * overlay service). Returns the live, shared copy once one exists, so changes made in
+         * Settings reach the overlay right away. Null before the first save.
+         */
+        fun layoutState(ctx: android.content.Context): androidx.compose.runtime.MutableState<Dashboard>? = synchronized(this) {
+            sharedLayout ?: run {
+                val f = File(ctx.filesDir, "dashboard.json")
+                val d = runCatching { lenientJson.decodeFromString(Dashboard.serializer(), f.readText()) }.getOrNull()
+                    ?.takeIf { it.pages.isNotEmpty() } ?: return null
+                mutableStateOf(d).also { sharedLayout = it }
+            }
+        }
 
         fun hashPin(pin: String): String =
             java.security.MessageDigest.getInstance("SHA-256").digest("canvastv:$pin".toByteArray())
