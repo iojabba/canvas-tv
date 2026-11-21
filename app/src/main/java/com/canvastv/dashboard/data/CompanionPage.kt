@@ -40,6 +40,11 @@ document.getElementById('code').addEventListener('keydown',e=>{if(e.key==='Enter
 <textarea id="msg" placeholder="Dinner's ready!"></textarea><label>From (optional)</label><input id="from" placeholder="Mom">
 <div class="row"><button class="primary" onclick="sendMsg()">Send</button><button onclick="clearMsgs()">Clear the message board</button></div></div>
 
+<div class="card"><h2 style="margin-top:0">Add a show</h2>
+<p class="muted">Open the show on Netflix, YouTube, Disney+, Hulu, Prime Video, Max or another service in your phone's browser (or tap Share → Copy link in its app), then paste the address here. It's added to the page selected below, with the show's picture.</p>
+<input id="showLink" placeholder="https://www.netflix.com/title/80117401">
+<div class="row"><button class="primary" onclick="addShow()">Add the show</button></div></div>
+
 <h2>Pages</h2><div class="tabs" id="tabs"></div>
 <div id="tiles"></div>
 <div class="card"><h2 style="margin-top:0">Add a tile to this page</h2>
@@ -75,10 +80,11 @@ WEATHER:['place:City, State','units:F or C','refreshMin'],NEWS:['urls*:feed addr
 TICKER:['symbols:AAPL, MSFT, BTC, ETH','refreshMin'],CALENDAR:['icsUrls*:private iCal addresses, comma separated','title','days','refreshMin'],
 PHOTOS:['sources*:picture or feed addresses, comma separated','seconds','shuffle:true/false','fit:fill or fit'],
 WEB:['url','title','zoom:percent','refreshMin','js:true/false'],MESSAGES:['title'],APP_DRAWER:['label'],
-HOME_ASSISTANT:['entities*:light.kitchen, scene.movie_time','title','refreshSec']};
+HOME_ASSISTANT:['entities*:light.kitchen, scene.movie_time','title','refreshSec'],
+SHOW:['link*:the show\'s web address','title:taken from the page if blank','image:picture address, taken from the page if blank','showTitle:true/false','pkg:app package, automatic if blank']};
 const LABELS={CLOCK:'Clock',APP:'App shortcut',HDMI:'HDMI input',STATS:'System stats',NOTE:'Note',VIDEO:'Video stream',NOW_PLAYING:'Now playing',
 COUNTDOWN:'Countdown',APP_DRAWER:'All apps',FOLDER:'App folder',WEATHER:'Weather',NEWS:'News / RSS',TICKER:'Stocks & crypto',CALENDAR:'Calendar',
-PHOTOS:'Photo slideshow',WEB:'Web page',SPEEDTEST:'Speed test',MESSAGES:'Message board',HOME_ASSISTANT:'Home Assistant'};
+PHOTOS:'Photo slideshow',WEB:'Web page',SPEEDTEST:'Speed test',MESSAGES:'Message board',HOME_ASSISTANT:'Home Assistant',SHOW:'TV show'};
 let layout=null,page=0,apps=[];
 const el=id=>document.getElementById(id);
 function toast(t){const e=el('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2500)}
@@ -113,6 +119,8 @@ async function saveTile(id){const t=layout.pages[page].tiles.find(t=>t.id==id);c
 async function delTile(id){if(!confirm('Delete this tile?'))return;
   try{await api('/api/tile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:page,id:id,action:'delete'})});toast('Deleted');load()}catch(e){toast(e.message)}}
 async function addTile(){try{await api('/api/tile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:page,action:'add',type:el('newType').value,config:{}})});toast('Added');load()}catch(e){toast(e.message)}}
+async function addShow(){const l=el('showLink').value.trim();if(!l)return;
+  try{await api('/api/tile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:page,action:'add',type:'SHOW',config:{link:l}})});el('showLink').value='';toast('Show added');load()}catch(e){toast(e.message)}}
 async function showOnTv(){try{await api('/api/page',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:page+1})});toast('Showing on the TV')}catch(e){toast(e.message)}}
 async function sendMsg(){const t=el('msg').value.trim();if(!t)return;
   try{await api('/api/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,from:el('from').value.trim()})});el('msg').value='';toast('Sent to the TV')}catch(e){toast(e.message)}}

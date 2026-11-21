@@ -78,6 +78,7 @@ enum class TileType(val label: String, val defaultW: Int, val defaultH: Int) {
     SPEEDTEST("Speed test", 3, 2),
     MESSAGES("Message board", 4, 2),
     HOME_ASSISTANT("Home Assistant", 4, 2),
+    SHOW("TV show", 2, 1),
 }
 
 @Serializable

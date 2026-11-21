@@ -203,7 +203,7 @@ private fun <T> List<T>.after(current: T): T = this[(indexOf(current) + 1).mod(s
 
 // ---------------------------------------------------------------- tile actions
 
-private val OPENABLE = setOf(TileType.APP, TileType.HDMI, TileType.VIDEO, TileType.APP_DRAWER, TileType.FOLDER)
+private val OPENABLE = setOf(TileType.APP, TileType.HDMI, TileType.VIDEO, TileType.APP_DRAWER, TileType.FOLDER, TileType.SHOW)
 
 @Composable
 fun TileActionsDialog(
@@ -244,6 +244,7 @@ fun tileTitle(ctx: android.content.Context, t: Tile): String = when (t.type) {
     TileType.WEATHER -> t.cfg("place").ifBlank { "Weather" }
     TileType.CLOCK -> t.cfg("city").ifBlank { "Clock" }
     TileType.HOME_ASSISTANT -> t.cfg("title").ifBlank { "Home Assistant" }
+    TileType.SHOW -> t.cfg("title").ifBlank { com.canvastv.dashboard.data.Shows.serviceFor(t.cfg("link"))?.name ?: "TV show" }
     else -> t.type.label
 }.let { if (it == t.type.label) it else "$it · ${t.type.label}" }
 
@@ -282,12 +283,24 @@ fun AddTileDialog(onDismiss: () -> Unit, onAdd: (TileType, Map<String, String>) 
                 }
             }
         }
+        TileType.SHOW -> Panel("Add a show", onDismiss) {
+            Column {
+                Text("Find the show on the streaming service's website (on a phone or computer), copy its address, and enter it here. The phone setup page is the easiest place to paste it.", color = LocalPalette.current.muted, fontSize = 13.sp)
+                Spacer(Modifier.padding(4.dp))
+                Box(Modifier.focusRequester(first)) {
+                    TextRow("Show link", "", "https://www.netflix.com/title/80117401") { link ->
+                        if (link.isNotBlank()) onAdd(TileType.SHOW, mapOf("link" to com.canvastv.dashboard.data.Shows.normalize(link)))
+                    }
+                }
+                Text("Works with Netflix, YouTube, Disney+, Hulu, Prime Video, Max, Paramount+, Peacock, Apple TV, Plex, Crunchyroll, Tubi, Pluto TV and Twitch links.", color = LocalPalette.current.muted, fontSize = 13.sp)
+            }
+        }
         else -> Panel("Add a tile", onDismiss) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(TileType.entries.size) { i ->
                     val t = TileType.entries[i]
                     ActionButton("${t.label}  (${t.defaultW}×${t.defaultH})", if (i == 0) Modifier.focusRequester(first) else Modifier) {
-                        if (t == TileType.APP || t == TileType.HDMI) picking = t else onAdd(t, emptyMap())
+                        if (t == TileType.APP || t == TileType.HDMI || t == TileType.SHOW) picking = t else onAdd(t, emptyMap())
                     }
                 }
             }
@@ -459,6 +472,21 @@ fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> U
                 TileType.MESSAGES -> {
                     item { TextRow("Title", tile.cfg("title"), "Messages") { set("title", it) } }
                     item { Text("Shows messages sent from the phone page or web commands (Settings → Phone setup).", color = LocalPalette.current.muted, fontSize = 13.sp, modifier = Modifier.focusRequester(first)) }
+                }
+                TileType.SHOW -> {
+                    item { Box(Modifier.focusRequester(first)) { TextRow("Show link", tile.cfg("link"), "https://www.netflix.com/title/…") { set("link", com.canvastv.dashboard.data.Shows.normalize(it)) } } }
+                    item { TextRow("Name", tile.cfg("title"), "Taken from the show's page") { set("title", it) } }
+                    item { TextRow("Picture address", tile.cfg("image"), "Taken from the show's page") { set("image", it) } }
+                    item { CycleRow("Show the name", yesNo(tile.cfgBool("showTitle", true)), { set("showTitle", (!tile.cfgBool("showTitle", true)).toString()) }) }
+                    item { CycleRow("Show the app's icon", yesNo(tile.cfgBool("showApp", true)), { set("showApp", (!tile.cfgBool("showApp", true)).toString()) }) }
+                    item {
+                        val svc = com.canvastv.dashboard.data.Shows.serviceFor(tile.cfg("link"))
+                        val installed = remember { Apps.list(ctx).filter { it.isTvApp } }
+                        val choices = listOf("") + installed.map { it.pkg }
+                        val cur = tile.cfg("pkg").takeIf { it in choices } ?: ""
+                        CycleRow("Opens in", if (cur.isEmpty()) "Automatic" + (svc?.let { " (${it.name})" } ?: "") else Apps.label(ctx, cur), { set("pkg", choices.after(cur)) })
+                    }
+                    item { Text("OK on the tile opens the show in its app. If the app can't open that show, the app opens on its home page instead.", color = LocalPalette.current.muted, fontSize = 13.sp) }
                 }
                 TileType.HOME_ASSISTANT -> {
                     item { ActionButton("Choose devices… (${com.canvastv.dashboard.ui.tiles.haIds(tile).size} chosen)", Modifier.focusRequester(first), primary = true) { pickingHa = true } }

@@ -205,6 +205,7 @@ fun DashboardScreen(vm: DashboardViewModel) {
                                     TileType.HDMI, TileType.VIDEO -> vm.fullScreenTile = tile
                                     TileType.NOW_PLAYING -> NowPlaying.playPause()
                                     TileType.SPEEDTEST -> com.canvastv.dashboard.data.SpeedTest.run(ctx, scope)
+                                    TileType.SHOW -> if (!com.canvastv.dashboard.data.Shows.open(ctx, tile)) vm.message = "Couldn't open that show. Is its app installed?"
                                     TileType.HOME_ASSISTANT -> {
                                         val quick = com.canvastv.dashboard.ui.tiles.haQuickEntity(ctx, tile)
                                         if (quick == null) dialog = DialogState.HomeAssistant(tile.id)
@@ -251,6 +252,7 @@ fun DashboardScreen(vm: DashboardViewModel) {
                         TileType.APP_DRAWER -> dialog = DialogState.Drawer
                         TileType.FOLDER -> dialog = DialogState.Folder(t.id)
                         TileType.HDMI, TileType.VIDEO -> vm.fullScreenTile = t
+                        TileType.SHOW -> if (!com.canvastv.dashboard.data.Shows.open(ctx, t)) vm.message = "Couldn't open that show. Is its app installed?"
                         else -> Unit
                     }
                 },
@@ -395,6 +397,7 @@ private fun describeTile(ctx: android.content.Context, t: Tile): String = when (
     TileType.NEWS -> "News headlines"
     TileType.MESSAGES -> "Message board"
     TileType.HOME_ASSISTANT -> "Home Assistant controls. Press OK to use them"
+    TileType.SHOW -> "${t.cfg("title").ifBlank { "Show" }}. Press OK to watch"
     TileType.TICKER -> "Stock and crypto prices"
     TileType.CALENDAR -> "Calendar"
     TileType.PHOTOS -> "Photo slideshow"

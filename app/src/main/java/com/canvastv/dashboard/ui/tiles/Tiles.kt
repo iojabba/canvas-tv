@@ -88,6 +88,7 @@ fun TileContent(tile: Tile, cellHeightDp: Float, liveVideo: Boolean, hiddenApps:
         TileType.WEATHER -> WeatherTile(tile, cellHeightDp)
         TileType.MESSAGES -> MessagesTile(tile)
         TileType.HOME_ASSISTANT -> HomeAssistantTile(tile, cellHeightDp)
+        TileType.SHOW -> ShowTile(tile)
         TileType.NEWS -> NewsTile(tile)
         TileType.TICKER -> TickerTile(tile)
         TileType.CALENDAR -> CalendarTile(tile)

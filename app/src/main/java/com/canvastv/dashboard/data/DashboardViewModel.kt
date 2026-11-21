@@ -350,7 +350,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
         val before = pageIndex
         val old = this.pageIndex
         this.pageIndex = before
-        val ok = addTile(t, config)
+        val cfg = if (t == TileType.SHOW) config.mapValues { (k, v) -> if (k == "link") Shows.normalize(v) else v } else config
+        val ok = addTile(t, cfg)
         this.pageIndex = old
         return if (ok) null else "No room on that page"
     }
