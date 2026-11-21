@@ -55,10 +55,10 @@ fun ShowTile(tile: Tile) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
     val link = tile.cfg("link")
-    if (link.isBlank()) {
+    if (link.isBlank() && tile.cfg("pkg").isBlank()) {
         Column(Modifier.fillMaxSize().padding(12.dp)) {
             Text("TV show", fontSize = 14.sp, color = p.accentText)
-            Text("Add the show's link in Configure", fontSize = 13.sp, color = p.muted)
+            Text("Choose the show in Configure", fontSize = 13.sp, color = p.muted)
         }
         return
     }

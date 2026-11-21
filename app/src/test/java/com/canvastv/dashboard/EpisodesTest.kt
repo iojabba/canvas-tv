@@ -54,4 +54,20 @@ class EpisodesTest {
     }
 
     @Test fun badJson() = assertNull(Episodes.parse("nope"))
+
+    @Test fun searchResultsAndServices() {
+        val hits = Episodes.parseSearch("""[
+          {"score":0.9,"show":{"id":2,"name":"Love Is Blind","premiered":"2020-02-13","webChannel":{"name":"Netflix"},"network":null,"officialSite":"https://www.netflix.com/title/81185694"}},
+          {"score":0.5,"show":{"id":5,"name":"The Pitt","premiered":"2025-01-09","webChannel":{"name":"HBO Max"},"officialSite":null}}]""")
+        assertEquals(2, hits.size)
+        assertEquals("2020", hits[0].year)
+        assertEquals("Netflix", hits[0].channel)
+        assertEquals("", hits[1].officialSite)
+        assertEquals("HBO Max", com.canvastv.dashboard.data.Shows.serviceForChannel("HBO")?.name)
+        assertEquals("Hulu", com.canvastv.dashboard.data.Shows.serviceForChannel("FXX")?.name)
+        assertEquals("Apple TV", com.canvastv.dashboard.data.Shows.serviceForChannel("Apple TV+")?.name)
+        assertEquals("Prime Video", com.canvastv.dashboard.data.Shows.serviceForChannel("Prime Video")?.name)
+        assertNull(com.canvastv.dashboard.data.Shows.serviceForChannel(""))
+        assertEquals(emptyList<Any>(), Episodes.parseSearch("garbage"))
+    }
 }

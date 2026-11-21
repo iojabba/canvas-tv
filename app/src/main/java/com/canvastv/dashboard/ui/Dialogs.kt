@@ -290,22 +290,13 @@ fun AddTileDialog(onDismiss: () -> Unit, onAdd: (TileType, Map<String, String>) 
                 }
             }
         }
-        TileType.SHOW -> Panel("Add a show", onDismiss) {
-            Column {
-                Text("Find the show on the streaming service's website (on a phone or computer), copy its address, and enter it here. The phone setup page is the easiest place to paste it.", color = LocalPalette.current.muted, fontSize = 13.sp)
-                Spacer(Modifier.padding(4.dp))
-                Box(Modifier.focusRequester(first)) {
-                    TextRow("Show link", "", "https://www.netflix.com/title/80117401") { link ->
-                        if (link.isNotBlank()) onAdd(TileType.SHOW, mapOf("link" to com.canvastv.dashboard.data.Shows.normalize(link)))
-                    }
-                }
-                Text("Works with Netflix, YouTube, Disney+, Hulu, Prime Video, Max, Paramount+, Peacock, Apple TV, Plex, Crunchyroll, Tubi, Pluto TV and Twitch links.", color = LocalPalette.current.muted, fontSize = 13.sp)
-            }
-        }
+        TileType.SHOW -> ShowSearchPanel(onDismiss, first) { cfg -> onAdd(TileType.SHOW, cfg) }
         else -> Panel("Add a tile", onDismiss) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(TileType.entries.size) { i ->
-                    val t = TileType.entries[i]
+                // The most-used kinds first.
+                val order = listOf(TileType.SHOW, TileType.APP) + TileType.entries.filter { it != TileType.SHOW && it != TileType.APP }
+                items(order.size) { i ->
+                    val t = order[i]
                     ActionButton("${t.label}  (${t.defaultW}×${t.defaultH})", if (i == 0) Modifier.focusRequester(first) else Modifier) {
                         if (t == TileType.APP || t == TileType.HDMI || t == TileType.SHOW) picking = t else onAdd(t, emptyMap())
                     }
@@ -1088,6 +1079,84 @@ private fun HaPickerDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- show search
+
+/**
+ * Add a show by name: search (TVmaze), pick the right one, and the tile is set up to open it in
+ * its streaming app. When the service isn't clear, it asks which app. A link can still be typed.
+ */
+@Composable
+private fun ShowSearchPanel(onDismiss: () -> Unit, first: FocusRequester, onAdd: (Map<String, String>) -> Unit) {
+    val ctx = LocalContext.current
+    val p = LocalPalette.current
+    var query by remember { mutableStateOf("") }
+    var picked by remember { mutableStateOf<com.canvastv.dashboard.data.ShowHit?>(null) }
+    var byLink by remember { mutableStateOf(false) }
+    val results by androidx.compose.runtime.produceState<Result<List<com.canvastv.dashboard.data.ShowHit>>?>(null, query) {
+        value = if (query.isBlank()) null else runCatching { com.canvastv.dashboard.data.Episodes.search(query) }
+    }
+    val resultFocus = remember { FocusRequester() }
+    LaunchedEffect(results) { if (results?.getOrNull()?.isNotEmpty() == true) runCatching { resultFocus.requestFocus() } }
+
+    val hit = picked
+    if (hit != null) {
+        // The service wasn't clear from TVmaze: ask which app opens it.
+        val apps = remember { Apps.list(ctx).filter { it.isTvApp } }
+        val f = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { f.requestFocus() } }
+        Panel("Which app has ${hit.name}?", onDismiss) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(apps.size) { i ->
+                    ActionButton(apps[i].label, if (i == 0) Modifier.focusRequester(f) else Modifier) {
+                        onAdd(com.canvastv.dashboard.data.Shows.configFor(ctx, hit, pkgOverride = apps[i].pkg))
+                    }
+                }
+            }
+        }
+        return
+    }
+    Panel("Add a show", onDismiss, wide = true) {
+        Column {
+            if (!byLink) {
+                Box(Modifier.focusRequester(first)) {
+                    TextRow("Show name", query, "Type the name, or use the keyboard's microphone") { query = it }
+                }
+                val r = results
+                when {
+                    r == null -> Text("Press OK on the box above to type. You'll get a list to pick from.", color = p.muted, fontSize = 13.sp)
+                    r.isFailure -> Text("Couldn't search right now (${r.exceptionOrNull()?.message}). Check the TV's internet connection.", color = Color(0xFFFF8A80), fontSize = 14.sp)
+                    r.getOrThrow().isEmpty() -> Text("No shows called \"$query\". Try a shorter name.", color = p.muted, fontSize = 14.sp)
+                    else -> {
+                        val list = r.getOrThrow().take(12)
+                        Spacer(Modifier.padding(4.dp))
+                        LazyColumn(Modifier.heightIn(max = 340.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(list.size) { i ->
+                                val h = list[i]
+                                val cfg = remember(h) { com.canvastv.dashboard.data.Shows.configFor(ctx, h) }
+                                val opensIn = cfg["link"]?.let { com.canvastv.dashboard.data.Shows.serviceFor(it)?.name }
+                                    ?: cfg["pkg"]?.let { Apps.label(ctx, it) }
+                                val label = h.name + (if (h.year.isNotEmpty()) " (${h.year})" else "") +
+                                    (if (h.channel.isNotEmpty()) " · ${h.channel}" else "") + (opensIn?.let { "  →  opens in $it" } ?: "  →  choose the app")
+                                ActionButton(label, if (i == 0) Modifier.focusRequester(resultFocus) else Modifier) {
+                                    if (cfg["link"] != null || cfg["pkg"] != null) onAdd(cfg) else picked = h
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.padding(4.dp))
+                ActionButton("Enter a link instead") { byLink = true }
+            } else {
+                Text("Paste or type the show's address from the streaming service's website.", color = p.muted, fontSize = 13.sp)
+                TextRow("Show link", "", "https://www.netflix.com/title/80117401") { link ->
+                    if (link.isNotBlank()) onAdd(mapOf("link" to com.canvastv.dashboard.data.Shows.normalize(link)))
+                }
+                ActionButton("Search by name instead") { byLink = false }
             }
         }
     }

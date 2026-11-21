@@ -55,6 +55,34 @@ object Shows {
         return SERVICES.firstOrNull { s -> s.hosts.any { h == it || h.endsWith(".$it") } }
     }
 
+    /** The service a TV network or streaming channel name belongs to ("HBO" → HBO Max, "FXX" → Hulu). */
+    fun serviceForChannel(channel: String): StreamingService? =
+        if (channel.isBlank()) null else SERVICES.firstOrNull { Episodes.serviceMatches(channel, it.name) }
+
+    /** The installed app for a service, by package or by app name. */
+    fun installedApp(ctx: Context, svc: StreamingService): String? {
+        svc.packages.firstOrNull { Apps.isInstalled(ctx, it) }?.let { return it }
+        val apps = runCatching { Apps.list(ctx) }.getOrDefault(emptyList()).filter { it.isTvApp }
+        return svc.appNames.firstNotNullOfOrNull { n -> apps.firstOrNull { it.label.equals(n, true) }?.pkg ?: apps.firstOrNull { it.label.contains(n, true) }?.pkg }
+    }
+
+    /**
+     * Tile settings for a show picked from search: its page on the streaming service when TVmaze
+     * knows it (that opens the show itself), else just the service's app.
+     */
+    fun configFor(ctx: Context, hit: ShowHit, pkgOverride: String? = null): Map<String, String> {
+        val site = normalize(hit.officialSite)
+        val siteSvc = serviceFor(site)
+        val svc = siteSvc ?: serviceForChannel(hit.channel)
+        val pkg = pkgOverride ?: svc?.let { installedApp(ctx, it) }
+        return buildMap {
+            put("title", hit.name)
+            put("tvmaze", hit.id.toString())
+            if (siteSvc != null) put("link", site)
+            if (pkg != null && (siteSvc == null || pkgOverride != null)) put("pkg", pkg)
+        }
+    }
+
     /** "netflix.com/title/123" → "https://netflix.com/title/123". */
     fun normalize(link: String): String = link.trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
 
@@ -69,9 +97,7 @@ object Shows {
     fun appFor(ctx: Context, tile: Tile): String? {
         tile.cfg("pkg").takeIf { it.isNotBlank() }?.let { return it }
         val svc = serviceFor(tile.cfg("link")) ?: return null
-        svc.packages.firstOrNull { Apps.isInstalled(ctx, it) }?.let { return it }
-        val apps = runCatching { Apps.list(ctx) }.getOrDefault(emptyList()).filter { it.isTvApp }
-        return svc.appNames.firstNotNullOfOrNull { n -> apps.firstOrNull { it.label.equals(n, true) }?.pkg ?: apps.firstOrNull { it.label.contains(n, true) }?.pkg }
+        return installedApp(ctx, svc)
     }
 
     /** Ways to open the show, most specific first. */

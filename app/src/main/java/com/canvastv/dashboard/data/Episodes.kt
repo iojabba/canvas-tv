@@ -26,6 +26,9 @@ data class ShowEpisodes(
     val nextLabel: String?,
 )
 
+/** One search result: enough to tell same-named shows apart and to guess where it streams. */
+data class ShowHit(val id: Int, val name: String, val year: String, val channel: String, val officialSite: String)
+
 object Episodes {
     private val json = Json { ignoreUnknownKeys = true }
     private const val API = "https://api.tvmaze.com"
@@ -58,8 +61,25 @@ object Episodes {
         return (best?.get("id") as? JsonPrimitive)?.intOrNull
     }
 
+    /** Shows matching [query], best first. */
+    suspend fun search(query: String): List<ShowHit> =
+        parseSearch(httpGet("$API/search/shows?q=${URLEncoder.encode(query.trim(), "UTF-8")}"))
+
+    fun parseSearch(text: String): List<ShowHit> = runCatching {
+        json.parseToJsonElement(text).jsonArray.mapNotNull { (it as? JsonObject)?.get("show") as? JsonObject }.mapNotNull { s ->
+            fun str(o: JsonObject?, k: String) = (o?.get(k) as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ShowHit(
+                id = (s["id"] as? JsonPrimitive)?.intOrNull ?: return@mapNotNull null,
+                name = str(s, "name").orEmpty(),
+                year = str(s, "premiered")?.take(4).orEmpty(),
+                channel = str(s["webChannel"] as? JsonObject, "name") ?: str(s["network"] as? JsonObject, "name").orEmpty(),
+                officialSite = str(s, "officialSite").orEmpty(),
+            )
+        }
+    }.getOrDefault(emptyList())
+
     /** TVmaze calls them "Apple TV+", "HBO Max", "Prime Video", "STARZ", "FXX"… */
-    private fun serviceMatches(channel: String, service: String): Boolean {
+    internal fun serviceMatches(channel: String, service: String): Boolean {
         val c = norm(channel); val s = norm(service)
         if (c.contains(s) || s.contains(c)) return true
         return when (s) {
