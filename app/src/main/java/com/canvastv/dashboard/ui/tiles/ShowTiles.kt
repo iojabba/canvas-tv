@@ -120,20 +120,18 @@ fun ShowTile(tile: Tile, animate: Boolean = true) {
         val showTitle = tile.cfgBool("showTitle", true) || image.isBlank()
         val next = if (tile.cfgBool("showNext", true)) Episodes.nextLabel(eps) else null
         if (showTitle || next != null) {
-            androidx.compose.foundation.layout.Row(
+            // Two lines, so a long name isn't squeezed: when the next new episode airs, then the name.
+            Column(
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000))))
-                    .padding(start = 10.dp, end = 10.dp, top = 18.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(start = 10.dp, end = 10.dp, top = 16.dp, bottom = 6.dp),
             ) {
-                Text(if (showTitle) title.ifBlank { service?.name ?: "Show" } else "", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.SemiBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // When the next new (first-run) episode comes out.
                 if (next != null) Text(
-                    next, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                    color = if (next.startsWith("Tonight") || next.startsWith("Tomorrow")) p.accent else Color.White,
-                    modifier = Modifier.padding(start = 8.dp),
+                    next, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                    color = if (next.startsWith("Tonight") || next.startsWith("Tomorrow")) p.accent else Color.White.copy(alpha = 0.85f),
                 )
+                if (showTitle) Text(title.ifBlank { service?.name ?: "Show" }, fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (isNew) {
