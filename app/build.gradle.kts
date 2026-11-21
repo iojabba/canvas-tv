@@ -13,8 +13,8 @@ android {
         applicationId = "com.canvastv.dashboard"
         minSdk = 28
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.7.1-shows"
+        versionCode = 13
+        versionName = "0.7.2-shows"
     }
 
     signingConfigs {

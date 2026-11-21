@@ -356,6 +356,35 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
         return if (ok) null else "No room on that page"
     }
 
+    /** Remembers when a show was opened, so its "NEW" badge clears until the next episode. */
+    fun markShowOpened(tileId: String) {
+        val t = dashboard.pages.flatMap { it.tiles }.firstOrNull { it.id == tileId } ?: return
+        update { d -> d.copy(pages = d.pages.map { p -> p.copy(tiles = p.tiles.map { if (it.id == t.id) it.withCfg("lastOpened", System.currentTimeMillis().toString()) else it }) }) }
+    }
+
+    /**
+     * Adds show tiles (2×1 each) to a page called "Shows", creating it if needed and skipping
+     * shows that are already there. Used by the computer set-up extras.
+     */
+    fun addShows(shows: List<Triple<String, String, String>>): Int {
+        var added = 0
+        update { d ->
+            val idx = d.pages.indexOfFirst { it.name.equals("Shows", true) }
+            var p = if (idx >= 0) d.pages[idx] else Page(name = "Shows")
+            val have = p.tiles.filter { it.type == TileType.SHOW }.map { Shows.normalize(it.cfg("link")) }.toMutableSet()
+            for ((title, link, pkg) in shows) {
+                val l = Shows.normalize(link)
+                if (l.isBlank() || l in have) continue
+                val spot = p.freeSpot(2, 1, d) ?: break
+                val cfg = buildMap { put("link", l); if (title.isNotBlank()) put("title", title); if (pkg.isNotBlank()) put("pkg", pkg) }
+                p = p.copy(tiles = p.tiles + Tile(type = TileType.SHOW, x = spot.first, y = spot.second, w = 2, h = 1, config = cfg))
+                have += l; added++
+            }
+            d.copy(pages = if (idx >= 0) d.pages.toMutableList().also { it[idx] = p } else d.pages + p)
+        }
+        return added
+    }
+
     override fun deleteTileFromWeb(pageIndex: Int, tileId: String): String? {
         val p = pageAt(pageIndex) ?: return "No such page"
         if (p.tiles.none { it.id == tileId }) return "That tile isn't on the page anymore"

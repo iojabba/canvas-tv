@@ -13,7 +13,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /** A streaming service: the web addresses its show links use, and its TV app(s), best first. */
-data class StreamingService(val name: String, val hosts: List<String>, val packages: List<String>)
+data class StreamingService(
+    val name: String,
+    val hosts: List<String>,
+    val packages: List<String>,
+    /** If none of [packages] is installed, an installed TV app whose name contains one of these is used. */
+    val appNames: List<String> = listOf(name),
+)
 
 /**
  * Show shortcuts. A show is saved as the link to it on the service's website (what you get from
@@ -25,12 +31,15 @@ object Shows {
         StreamingService("Netflix", listOf("netflix.com"), listOf("com.netflix.ninja", "com.netflix.mediaclient")),
         StreamingService("YouTube", listOf("youtube.com", "youtu.be"), listOf("com.google.android.youtube.tv", "com.google.android.youtube")),
         StreamingService("Disney+", listOf("disneyplus.com"), listOf("com.disney.disneyplus")),
-        StreamingService("Hulu", listOf("hulu.com"), listOf("com.hulu.livingroomplus", "com.hulu.plus")),
+        // Hulu is moving into the Disney+ app; whichever is installed opens Hulu shows.
+        StreamingService("Hulu", listOf("hulu.com"), listOf("com.hulu.livingroomplus", "com.hulu.plus", "com.disney.disneyplus"), listOf("Hulu", "Disney+")),
         StreamingService("Prime Video", listOf("primevideo.com", "amazon.com", "amazon.co.uk", "amazon.ca"), listOf("com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient")),
-        StreamingService("Max", listOf("max.com", "hbomax.com"), listOf("com.wbd.stream", "com.hbo.hbonow")),
+        StreamingService("HBO Max", listOf("max.com", "hbomax.com"), listOf("com.wbd.stream", "com.hbo.hbonow"), listOf("HBO Max", "Max")),
+        StreamingService("MGM+", listOf("mgmplus.com"), listOf("com.mgm.mgmplus", "com.epix.epix.now"), listOf("MGM+", "MGM Plus", "MGM")),
+        StreamingService("Starz", listOf("starz.com"), listOf("com.bydeluxe.d3.android.program.starz"), listOf("STARZ")),
         StreamingService("Paramount+", listOf("paramountplus.com"), listOf("com.cbs.ott", "com.cbs.app")),
         StreamingService("Peacock", listOf("peacocktv.com"), listOf("com.peacocktv.peacockandroid")),
-        StreamingService("Apple TV", listOf("tv.apple.com"), listOf("com.apple.atve.androidtv.appletv")),
+        StreamingService("Apple TV", listOf("tv.apple.com"), listOf("com.apple.atve.androidtv.appletv"), listOf("Apple TV")),
         StreamingService("Plex", listOf("plex.tv"), listOf("com.plexapp.android")),
         StreamingService("Crunchyroll", listOf("crunchyroll.com"), listOf("com.crunchyroll.crunchyroid")),
         StreamingService("Tubi", listOf("tubitv.com"), listOf("com.tubitv")),
@@ -59,7 +68,10 @@ object Shows {
     /** The app that will open [tile]: the one chosen in Configure, else the service's installed app. */
     fun appFor(ctx: Context, tile: Tile): String? {
         tile.cfg("pkg").takeIf { it.isNotBlank() }?.let { return it }
-        return serviceFor(tile.cfg("link"))?.packages?.firstOrNull { Apps.isInstalled(ctx, it) }
+        val svc = serviceFor(tile.cfg("link")) ?: return null
+        svc.packages.firstOrNull { Apps.isInstalled(ctx, it) }?.let { return it }
+        val apps = runCatching { Apps.list(ctx) }.getOrDefault(emptyList()).filter { it.isTvApp }
+        return svc.appNames.firstNotNullOfOrNull { n -> apps.firstOrNull { it.label.equals(n, true) }?.pkg ?: apps.firstOrNull { it.label.contains(n, true) }?.pkg }
     }
 
     /** Ways to open the show, most specific first. */
