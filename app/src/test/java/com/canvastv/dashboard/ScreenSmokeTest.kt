@@ -3,7 +3,8 @@ package com.canvastv.dashboard
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasScrollAction
@@ -91,7 +92,7 @@ class ScreenSmokeTest {
     }
 
     @Test fun `settings opens and scrolls to the end`() {
-        rule.onNodeWithText("Settings").performClick()
+        rule.onNodeWithText("Settings").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
         rule.onNodeWithText("Mode").assertExists()
         rule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Close"))
@@ -100,7 +101,7 @@ class ScreenSmokeTest {
 
     @Test fun `edit mode, add tile dialog and pin lock`() {
         onMain { vm.startEditing() }
-        rule.onNodeWithText("+ Tile").performClick()
+        rule.onNodeWithText("+ Tile").performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
         rule.onNodeWithText("Add a tile").assertExists()
         // Lock with a PIN; leaving and re-entering edit mode now asks for it.
