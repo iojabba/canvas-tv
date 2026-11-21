@@ -117,12 +117,15 @@ private fun TextRow(label: String, initial: String, hint: String = "", secret: B
     val p = LocalPalette.current
     var value by remember(initial) { mutableStateOf(initial) }
     var typing by remember { mutableStateOf(false) }
+    // Only a real loss of focus ends typing, not the "not focused yet" report the field gives when it first appears.
+    var fieldFocused by remember { mutableStateOf(false) }
     val field = remember { FocusRequester() }
     val button = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     fun finish() {
         if (!typing) return
         typing = false
+        fieldFocused = false
         keyboard?.hide()
         // An emptied secret keeps the saved one; there's a separate button to forget it.
         if (secret && value.isBlank()) { value = initial; return }
@@ -175,7 +178,10 @@ private fun TextRow(label: String, initial: String, hint: String = "", secret: B
                             if ((code == android.view.KeyEvent.KEYCODE_BACK || code == android.view.KeyEvent.KEYCODE_DPAD_CENTER) && ev.type == KeyEventType.KeyUp) { finish(); true }
                             else code == android.view.KeyEvent.KEYCODE_BACK
                         }
-                        .onFocusChanged { if (!it.isFocused && typing) finish() },
+                        .onFocusChanged {
+                            if (it.isFocused) fieldFocused = true
+                            else if (typing && fieldFocused) finish()
+                        },
                 )
             }
         }
