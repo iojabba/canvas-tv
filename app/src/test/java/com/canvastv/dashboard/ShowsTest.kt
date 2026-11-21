@@ -13,6 +13,8 @@ class ShowsTest {
         assertEquals("YouTube", Shows.serviceFor("youtu.be/abc")?.name)
         assertEquals("Disney+", Shows.serviceFor("https://www.disneyplus.com/series/bluey/abc")?.name)
         assertEquals("HBO Max", Shows.serviceFor("https://play.max.com/show/123")?.name)
+        assertEquals("Stremio", Shows.serviceFor("stremio:///detail/series/tt0056751")?.name)
+        assertEquals("Stremio", Shows.serviceFor("https://web.stremio.com/#/detail/series/tt0056751")?.name)
         assertEquals("MGM+", Shows.serviceFor("https://www.mgmplus.com/series/from")?.name)
         assertEquals("Starz", Shows.serviceFor("https://www.starz.com/series/69342")?.name)
         assertEquals("Prime Video", Shows.serviceFor("https://www.amazon.com/gp/video/detail/B0B8")?.name)

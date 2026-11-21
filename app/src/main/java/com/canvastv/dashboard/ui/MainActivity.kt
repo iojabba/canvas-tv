@@ -56,12 +56,12 @@ class MainActivity : ComponentActivity() {
      *  Home Assistant: --es haUrl http://192.168.1.20:8123 --es haToken <long-lived token>
      */
     private fun handleAdminExtras(intent: Intent?) {
-        // Show shortcuts: --esa showLinks <link>,<link>… [--esa showTitles <name>,…] [--esa showApps <package or ->,…]
+        // Show shortcuts: --esa showLinks <link>,<link>… [--esa showTitles <name>,…] [--esa showApps <package or ->,…] [--esa showTvmaze <TVmaze number or ->,…]
         intent?.getStringArrayExtra("showLinks")?.let { links ->
             val titles = intent.getStringArrayExtra("showTitles").orEmpty()
             val apps = intent.getStringArrayExtra("showApps").orEmpty()
-            val n = vm.addShows(links.mapIndexed { i, l -> Triple(titles.getOrElse(i) { "" }.trim(), l.trim(), apps.getOrElse(i) { "" }.trim().takeIf { it != "-" }.orEmpty()) })
-            intent.removeExtra("showLinks"); intent.removeExtra("showTitles"); intent.removeExtra("showApps")
+            val n = vm.addShows(links.mapIndexed { i, l -> Triple(titles.getOrElse(i) { "" }.trim(), l.trim(), apps.getOrElse(i) { "" }.trim().takeIf { it != "-" }.orEmpty()) }, intent.getStringArrayExtra("showTvmaze").orEmpty().toList())
+            intent.removeExtra("showLinks"); intent.removeExtra("showTitles"); intent.removeExtra("showApps"); intent.removeExtra("showTvmaze")
             vm.message = "Added $n shows to the Shows page"
         }
         intent?.getStringExtra("overlayCity")?.let { city ->

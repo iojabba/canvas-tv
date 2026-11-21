@@ -46,11 +46,14 @@ object Shows {
         StreamingService("Pluto TV", listOf("pluto.tv"), listOf("tv.pluto.android")),
         StreamingService("Twitch", listOf("twitch.tv"), listOf("tv.twitch.android.app")),
         StreamingService("Spotify", listOf("open.spotify.com"), listOf("com.spotify.tv.android", "com.spotify.music")),
+        // Stremio links look like stremio:///detail/series/<IMDb id>.
+        StreamingService("Stremio", listOf("web.stremio.com", "strem.io", "stremio.com"), listOf("com.stremio.one", "com.stremio.tv")),
     )
 
     private val json = Json { ignoreUnknownKeys = true }
 
     fun serviceFor(link: String): StreamingService? {
+        if (link.trim().startsWith("stremio:", true)) return SERVICES.first { it.name == "Stremio" }
         val h = hostOf(normalize(link))
         return SERVICES.firstOrNull { s -> s.hosts.any { h == it || h.endsWith(".$it") } }
     }

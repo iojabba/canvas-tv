@@ -366,17 +366,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
      * Adds show tiles (2×1 each) to a page called "Shows", creating it if needed and skipping
      * shows that are already there. Used by the computer set-up extras.
      */
-    fun addShows(shows: List<Triple<String, String, String>>): Int {
+    fun addShows(shows: List<Triple<String, String, String>>, tvmaze: List<String> = emptyList()): Int {
         var added = 0
         update { d ->
             val idx = d.pages.indexOfFirst { it.name.equals("Shows", true) }
             var p = if (idx >= 0) d.pages[idx] else Page(name = "Shows")
             val have = p.tiles.filter { it.type == TileType.SHOW }.map { Shows.normalize(it.cfg("link")) }.toMutableSet()
-            for ((title, link, pkg) in shows) {
+            for ((i, show) in shows.withIndex()) {
+                val (title, link, pkg) = show
+                val tv = tvmaze.getOrNull(i)?.trim()?.takeIf { it.toIntOrNull() != null }
                 val l = Shows.normalize(link)
                 if (l.isBlank() || l in have) continue
                 val spot = p.freeSpot(2, 1, d) ?: break
-                val cfg = buildMap { put("link", l); if (title.isNotBlank()) put("title", title); if (pkg.isNotBlank()) put("pkg", pkg) }
+                val cfg = buildMap { put("link", l); if (title.isNotBlank()) put("title", title); if (pkg.isNotBlank()) put("pkg", pkg); if (tv != null) put("tvmaze", tv) }
                 p = p.copy(tiles = p.tiles + Tile(type = TileType.SHOW, x = spot.first, y = spot.second, w = 2, h = 1, config = cfg))
                 have += l; added++
             }

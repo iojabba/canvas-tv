@@ -41,7 +41,7 @@ fun showInfo(tile: Tile): Pair<String, String> {
     val link = tile.cfg("link")
     var title = tile.cfg("title")
     var image = tile.cfg("image")
-    if (link.isNotBlank() && (title.isBlank() || image.isBlank())) {
+    if (link.isWebLink() && (title.isBlank() || image.isBlank())) {
         // A show's page rarely changes; look it up once a week.
         val data by rememberRemoteData("show:$link", 7L * 24 * 3600 * 1000) { Shows.fetchInfo(link) }
         val (t, i) = Shows.parseInfo(data?.text)
@@ -50,6 +50,9 @@ fun showInfo(tile: Tile): Pair<String, String> {
     }
     return title to image
 }
+
+/** Only web pages have a title and picture to read; app links (stremio://…) don't. */
+private fun String.isWebLink() = Shows.normalize(this).let { it.startsWith("https://", true) || it.startsWith("http://", true) }
 
 /** The cache key for a show's episode data; the page tab reads the same cache to count new shows. */
 fun episodesKey(tile: Tile, lookup: String): String =
