@@ -478,6 +478,7 @@ fun ConfigureTileDialog(tile: Tile, onChange: (Tile) -> Unit, onDismiss: () -> U
                     item { CycleRow("Show the name", yesNo(tile.cfgBool("showTitle", true)), { set("showTitle", (!tile.cfgBool("showTitle", true)).toString()) }) }
                     item { CycleRow("Show the app's icon", yesNo(tile.cfgBool("showApp", true)), { set("showApp", (!tile.cfgBool("showApp", true)).toString()) }) }
                     item { CycleRow("\"NEW\" badge for new episodes", yesNo(tile.cfgBool("newBadge", true)), { set("newBadge", (!tile.cfgBool("newBadge", true)).toString()) }) }
+                    item { CycleRow("Dim it when there's nothing new", yesNo(tile.cfgBool("dimOld", true)), { set("dimOld", (!tile.cfgBool("dimOld", true)).toString()) }) }
                     item { TextRow("TVmaze show number (if it finds the wrong show)", tile.cfg("tvmaze"), "Found by name") { set("tvmaze", it.filter(Char::isDigit)) } }
                     item {
                         val svc = com.canvastv.dashboard.data.Shows.serviceFor(tile.cfg("link"))

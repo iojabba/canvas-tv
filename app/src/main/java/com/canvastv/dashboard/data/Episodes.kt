@@ -99,7 +99,8 @@ object Episodes {
         val emb = o["_embedded"] as? JsonObject
         fun ep(k: String) = emb?.get(k) as? JsonObject
         fun stamp(e: JsonObject?) = (e?.get("airstamp") as? JsonPrimitive)?.content?.let { runCatching { Instant.parse(it) }.getOrNull() }
-            ?: (e?.get("airdate") as? JsonPrimitive)?.content?.let { runCatching { LocalDate.parse(it).atStartOfDay(ZoneId.of("America/New_York")).toInstant() }.getOrNull() }
+            // Date only (common for streaming drops): count it from the start of that day here, so the weekday shown is right.
+            ?: (e?.get("airdate") as? JsonPrimitive)?.content?.let { runCatching { LocalDate.parse(it).atStartOfDay(ZoneId.systemDefault()).toInstant() }.getOrNull() }
         fun label(e: JsonObject?): String? {
             e ?: return null
             val s = (e["season"] as? JsonPrimitive)?.intOrNull ?: return null
@@ -124,6 +125,24 @@ object Episodes {
             nextLabel = label(ep("nextepisode")),
         )
     }.getOrNull()
+
+    /**
+     * When the next new episode comes out, in this TV's time zone: "Tonight", "Tomorrow",
+     * "Next: Thu" within a week, else "Next: Dec 4". Null when none is scheduled.
+     */
+    fun nextLabel(e: ShowEpisodes?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String? {
+        val at = e?.nextAirs ?: return null
+        if (at.isBefore(now)) return null
+        val day = at.atZone(zone).toLocalDate()
+        val today = now.atZone(zone).toLocalDate()
+        val days = java.time.temporal.ChronoUnit.DAYS.between(today, day)
+        return when {
+            days == 0L -> "Tonight"
+            days == 1L -> "Tomorrow"
+            days < 7 -> "Next: " + day.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US)
+            else -> "Next: " + day.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US) + " " + day.dayOfMonth
+        }
+    }
 
     /**
      * True when an episode came out after the show was last opened from its tile. A show never

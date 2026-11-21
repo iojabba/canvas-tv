@@ -176,7 +176,14 @@ fun DashboardScreen(vm: DashboardViewModel) {
                 val cellW = maxWidth / d.columns
                 val cellH = maxHeight / d.rows
                 if (vm.editing) GridGuides(d.columns, d.rows)
-                val tiles = vm.page.tiles.sortedWith(compareBy({ it.y }, { it.x }))
+                // Shows with new episodes take the first show spots (on screen only; the saved layout doesn't change).
+                var showTick by remember { mutableStateOf(0) }
+                LaunchedEffect(Unit) { while (true) { delay(5 * 60_000L); showTick++ } }
+                val shown = remember(vm.page, vm.editing, showTick) {
+                    if (vm.editing) vm.page.tiles
+                    else com.canvastv.dashboard.ui.tiles.newShowsFirst(vm.page.tiles) { com.canvastv.dashboard.ui.tiles.hasNewEpisode(ctx, it) }
+                }
+                val tiles = shown.sortedWith(compareBy({ it.y }, { it.x }))
                 tiles.forEachIndexed { i, tile ->
                     key(tile.id) {
                         val req = tileFocus.getOrPut(tile.id) { FocusRequester() }
@@ -286,10 +293,21 @@ private fun TopBar(vm: DashboardViewModel, selectedTabFocus: FocusRequester, onA
     val ctx = LocalContext.current
     val d = vm.dashboard
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Recount new episodes every few minutes (cache only, no network).
+        var tick by remember { mutableStateOf(0) }
+        LaunchedEffect(Unit) { while (true) { delay(5 * 60_000L); tick++ } }
         d.pages.forEachIndexed { i, page ->
             val selected = i == vm.pageIndex
-            if (selected) AppButton(onClick = { vm.goToPage(i) }, modifier = Modifier.focusRequester(selectedTabFocus), scale = ButtonDefaults.scale(focusedScale = 1.05f)) { Text(page.name) }
-            else AppOutlinedButton(onClick = { vm.goToPage(i) }, scale = ButtonDefaults.scale(focusedScale = 1.05f)) { Text(page.name) }
+            val fresh = remember(page, tick) { com.canvastv.dashboard.ui.tiles.newShowCount(ctx, page) }
+            val label: @Composable () -> Unit = {
+                Text(page.name)
+                if (fresh > 0) Text(
+                    "  $fresh new", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = if (selected) Color.Unspecified else p.accentText,
+                )
+            }
+            if (selected) AppButton(onClick = { vm.goToPage(i) }, modifier = Modifier.focusRequester(selectedTabFocus), scale = ButtonDefaults.scale(focusedScale = 1.05f)) { label() }
+            else AppOutlinedButton(onClick = { vm.goToPage(i) }, scale = ButtonDefaults.scale(focusedScale = 1.05f)) { label() }
         }
         Spacer(Modifier.weight(1f))
         if (vm.editing) {

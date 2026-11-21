@@ -55,6 +55,18 @@ class EpisodesTest {
 
     @Test fun badJson() = assertNull(Episodes.parse("nope"))
 
+    @Test fun nextEpisodeDay() {
+        val zone = java.time.ZoneId.of("America/Los_Angeles")
+        val now = Instant.parse("2026-11-21T08:00:00Z") // Sat 12 AM in Lacey
+        fun at(s: String) = Episodes.parse(show.replace("2026-11-28T05:00:00+00:00", s))
+        assertEquals("Tonight", Episodes.nextLabel(at("2026-11-22T04:00:00+00:00"), now, zone))   // Sat 8 PM
+        assertEquals("Tomorrow", Episodes.nextLabel(at("2026-11-23T02:00:00+00:00"), now, zone))  // Sun 6 PM
+        assertEquals("Next: Thu", Episodes.nextLabel(at("2026-11-27T02:00:00+00:00"), now, zone)) // Thu 6 PM
+        assertEquals("Next: Dec 4", Episodes.nextLabel(at("2026-12-05T02:00:00+00:00"), now, zone))
+        assertNull(Episodes.nextLabel(at("2026-11-20T02:00:00+00:00"), now, zone))
+        assertNull(Episodes.nextLabel(null, now, zone))
+    }
+
     @Test fun searchResultsAndServices() {
         val hits = Episodes.parseSearch("""[
           {"score":0.9,"show":{"id":2,"name":"Love Is Blind","premiered":"2020-02-13","webChannel":{"name":"Netflix"},"network":null,"officialSite":"https://www.netflix.com/title/81185694"}},
@@ -69,5 +81,19 @@ class EpisodesTest {
         assertEquals("Prime Video", com.canvastv.dashboard.data.Shows.serviceForChannel("Prime Video")?.name)
         assertNull(com.canvastv.dashboard.data.Shows.serviceForChannel(""))
         assertEquals(emptyList<Any>(), Episodes.parseSearch("garbage"))
+    }
+}
+
+class NewShowsFirstTest {
+    @Test fun newShowsTakeTheFirstSpots() {
+        val a = com.canvastv.dashboard.model.Tile(id = "a", type = com.canvastv.dashboard.model.TileType.SHOW, x = 0, y = 0, w = 2, h = 1)
+        val b = a.copy(id = "b", x = 2)
+        val c = a.copy(id = "c", x = 4)
+        val clock = com.canvastv.dashboard.model.Tile(id = "k", type = com.canvastv.dashboard.model.TileType.CLOCK, x = 0, y = 2, w = 4, h = 2)
+        val out = com.canvastv.dashboard.ui.tiles.newShowsFirst(listOf(a, b, c, clock)) { it.id == "c" }.associateBy { it.id }
+        assertEquals(0, out["c"]!!.x)
+        assertEquals(2, out["a"]!!.x)
+        assertEquals(4, out["b"]!!.x)
+        assertEquals(clock, out["k"])
     }
 }
