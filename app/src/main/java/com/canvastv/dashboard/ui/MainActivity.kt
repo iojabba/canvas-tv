@@ -58,8 +58,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** True when Canvas TV is set as the TV's home screen. */
-fun isDefaultHome(ctx: android.content.Context): Boolean = runCatching {
+/** Tests replace this; the real TV always uses the package manager check. */
+@androidx.annotation.VisibleForTesting
+var homeCheckOverride: ((android.content.Context) -> Boolean)? = null
+
+/**
+ * True when Canvas TV is set as the TV's home screen. With no default chosen, Android
+ * resolves to its chooser ("android"), which counts as not ours.
+ */
+fun isDefaultHome(ctx: android.content.Context): Boolean = homeCheckOverride?.invoke(ctx) ?: runCatching {
     val r = ctx.packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-    r?.activityInfo?.packageName == ctx.packageName
+    val pkg = r?.activityInfo?.packageName
+    // Only trust the answer if another home app is visible at all; otherwise we can't tell.
+    val others = ctx.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+        .any { it.activityInfo.packageName != ctx.packageName && it.activityInfo.packageName != "android" }
+    pkg == ctx.packageName && others
 }.getOrDefault(false)

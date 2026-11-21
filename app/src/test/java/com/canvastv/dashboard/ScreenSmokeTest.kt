@@ -34,6 +34,12 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.LEGACY)
 @Config(qualifiers = "w960dp-h540dp-land-xhdpi")
 class ScreenSmokeTest {
+    companion object {
+        // Robolectric has no other launcher, so the app would think it's the home screen
+        // and hand off to "home" on start. Runs before the rule launches the activity.
+        init { com.canvastv.dashboard.ui.homeCheckOverride = { false } }
+    }
+
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
 
     private val vm get() = ViewModelProvider(rule.activity)[DashboardViewModel::class.java]

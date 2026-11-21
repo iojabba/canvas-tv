@@ -1,5 +1,5 @@
 package com.canvastv.dashboard
 
 object BuildConfigInfo {
-    const val VERSION = "0.5.0 (Phase 3a preview)"
+    const val VERSION = "0.5.1 (Phase 3a preview)"
 }
