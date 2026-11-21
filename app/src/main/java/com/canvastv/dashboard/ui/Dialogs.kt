@@ -590,6 +590,22 @@ fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
                 }
             }
 
+            item { SectionLabel("Home button") }
+            item {
+                val ctx = LocalContext.current
+                val p = LocalPalette.current
+                val on = remember { com.canvastv.dashboard.service.HomeHelper.enabled(ctx) }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (on) "The Home button helper is on: Canvas TV opens at startup and when you press Home."
+                        else "This TV keeps Google TV as its home screen. To open Canvas TV at startup and on Home, turn on \"Canvas TV Home button\" in the TV's Accessibility settings. If another launcher's helper (like Projectivy) is on there, turn it off so they don't fight over Home.",
+                        color = if (on) p.onSurface else p.muted, fontSize = 13.sp,
+                    )
+                    ActionButton("Open the TV's Accessibility settings") { com.canvastv.dashboard.service.HomeHelper.openAccessibilitySettings(ctx) }
+                    if (on) ActionButton("Go to the Google TV home once") { com.canvastv.dashboard.service.HomeHelper.openGoogleTvHome(ctx) }
+                }
+            }
+
             item { SectionLabel("Startup and overlay") }
             item { CycleRow("Open Canvas TV when the TV turns on", if (d.openOnStartup) "On" else "Off", { vm.setOpenOnStartup(!d.openOnStartup) }) }
             item { CycleRow("Overlay over other apps", d.overlay.mode.label, { vm.setOverlay(d.overlay.copy(mode = com.canvastv.dashboard.model.OverlayMode.entries.after(d.overlay.mode))) }) }

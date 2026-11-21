@@ -9,6 +9,11 @@ import androidx.activity.viewModels
 import com.canvastv.dashboard.data.DashboardViewModel
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** Set by the Home button helper: behave as if Home was pressed. */
+        const val EXTRA_HOME = "home"
+    }
+
     private val vm: DashboardViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,7 +39,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleAdminExtras(intent)
-        if (intent.hasCategory(Intent.CATEGORY_HOME)) {
+        if (intent.hasCategory(Intent.CATEGORY_HOME) || intent.getBooleanExtra(EXTRA_HOME, false)) {
             vm.fullScreenTile = null
             if (vm.editing) vm.stopEditing()
             vm.goToPage(0)

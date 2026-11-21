@@ -82,7 +82,8 @@ fun DashboardScreen(vm: DashboardViewModel) {
     val ctx = LocalContext.current
     var dialog by remember { mutableStateOf<DialogState?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val isHome = remember { isDefaultHome(ctx) }
+    // With the Home button helper on, Canvas TV acts as the home screen too.
+    val isHome = remember { isDefaultHome(ctx) || com.canvastv.dashboard.service.HomeHelper.enabled(ctx) }
     val firstTileFocus = remember { FocusRequester() }
     val pageTabFocus = remember { FocusRequester() }
     val tileFocus = remember { mutableMapOf<String, FocusRequester>() }
