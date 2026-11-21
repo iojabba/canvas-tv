@@ -40,9 +40,51 @@ class HomeHelper : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        // Switched on (by the person or by us): remember that it's wanted, so it comes back after restarts.
+        setWanted(this, true)
+    }
+
     companion object {
         val LAUNCHERS = setOf("com.google.android.apps.tv.launcherx", "com.google.android.tvlauncher", "com.google.android.leanbacklauncher")
         private var passUntil = 0L
+
+        private const val PREFS = "home_helper"
+
+        private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        fun wanted(ctx: Context) = prefs(ctx).getBoolean("wanted", false)
+        private fun setWanted(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("wanted", on).apply()
+
+        /** True once "adb shell pm grant com.canvastv.dashboard android.permission.WRITE_SECURE_SETTINGS" has been run. */
+        fun canSwitch(ctx: Context) =
+            ctx.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        /** Turns the helper on or off directly (needs [canSwitch]). Leaves other accessibility services alone. */
+        fun setEnabled(ctx: Context, on: Boolean): Boolean {
+            setWanted(ctx, on)
+            if (!canSwitch(ctx)) return false
+            return runCatching {
+                val me = ComponentName(ctx, HomeHelper::class.java).flattenToString()
+                val cr = ctx.contentResolver
+                val list = Settings.Secure.getString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+                    .split(':').filter { it.isNotBlank() && ComponentName.unflattenFromString(it)?.flattenToString() != me }
+                val next = if (on) list + me else list
+                Settings.Secure.putString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, next.joinToString(":"))
+                if (next.isNotEmpty()) Settings.Secure.putInt(cr, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+                true
+            }.onFailure { Log.w("CanvasTV", "Couldn't switch the Home helper", it) }.getOrDefault(false)
+        }
+
+        /**
+         * Some TVs switch accessibility helpers off after a restart or an app update. If the
+         * person had it on, switch it back on. Called at boot, after updates and on launch.
+         */
+        fun restoreIfWanted(ctx: Context) {
+            if (wanted(ctx) && !enabled(ctx) && canSwitch(ctx)) {
+                if (setEnabled(ctx, true)) Log.i("CanvasTV", "Home helper switched back on")
+            }
+        }
 
         /** True when the person has switched the helper on in Settings → Accessibility. */
         fun enabled(ctx: Context): Boolean {

@@ -216,6 +216,7 @@ class CanvasService : Service() {
 /** Starts the service (and opens the dashboard) after a full power-on, and after an app update. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
+        HomeHelper.restoreIfWanted(ctx)
         val d = DashboardViewModel.layoutState(ctx)?.value ?: return
         CanvasService.sync(ctx)
         if (intent.action == Intent.ACTION_BOOT_COMPLETED && d.openOnStartup) {

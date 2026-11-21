@@ -629,13 +629,22 @@ fun SettingsDialog(vm: DashboardViewModel, onDismiss: () -> Unit) {
             item {
                 val ctx = LocalContext.current
                 val p = LocalPalette.current
-                val on = remember { com.canvastv.dashboard.service.HomeHelper.enabled(ctx) }
+                var refresh by remember { mutableStateOf(0) }
+                val on = remember(refresh) { com.canvastv.dashboard.service.HomeHelper.enabled(ctx) }
+                val canSwitch = remember { com.canvastv.dashboard.service.HomeHelper.canSwitch(ctx) }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (canSwitch) {
+                        CycleRow("Open Canvas TV on Home and at startup", if (on) "On" else "Off", {
+                            com.canvastv.dashboard.service.HomeHelper.setEnabled(ctx, !on); refresh++
+                        })
+                        Text("Canvas TV keeps this on by itself after restarts and updates. Turn it off here (not in the TV's Accessibility settings) to get the Google TV home back.", color = p.muted, fontSize = 13.sp)
+                    } else
                     Text(
                         if (on) "The Home button helper is on: Canvas TV opens at startup and when you press Home."
                         else "This TV keeps Google TV as its home screen. To open Canvas TV at startup and on Home, turn on \"Canvas TV Home button\" in the TV's Accessibility settings. If another launcher's helper (like Projectivy) is on there, turn it off so they don't fight over Home.",
                         color = if (on) p.onSurface else p.muted, fontSize = 13.sp,
                     )
+                    if (!canSwitch) Text("To have Canvas TV switch it back on by itself after restarts, run once from a computer: adb shell pm grant com.canvastv.dashboard android.permission.WRITE_SECURE_SETTINGS", color = p.muted, fontSize = 12.sp)
                     ActionButton("Open the TV's Accessibility settings") { com.canvastv.dashboard.service.HomeHelper.openAccessibilitySettings(ctx) }
                     if (on) ActionButton("Go to the Google TV home once") { com.canvastv.dashboard.service.HomeHelper.openGoogleTvHome(ctx) }
                 }

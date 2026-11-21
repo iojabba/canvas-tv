@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
         }
         handleAdminExtras(intent)
         com.canvastv.dashboard.service.CanvasService.sync(this)
+        com.canvastv.dashboard.service.HomeHelper.restoreIfWanted(this)
         setContent {
             DashboardTheme(vm.effectiveTheme()) {
                 val full = vm.fullScreenTile
