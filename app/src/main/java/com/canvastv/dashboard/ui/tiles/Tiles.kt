@@ -333,7 +333,7 @@ private fun readStats(ctx: Context, down: Long, up: Long): Stats {
     val up_ = SystemClock.elapsedRealtime() / 1000
     val uptime = if (up_ >= 86400) "${up_ / 86400}d ${up_ % 86400 / 3600}h" else "${up_ / 3600}h ${up_ % 3600 / 60}m"
     return Stats(
-        ramUsedPct = (100 - mi.availMem * 100 / mi.totalMem).toInt(),
+        ramUsedPct = if (mi.totalMem > 0) (100 - mi.availMem * 100 / mi.totalMem).toInt() else 0,
         ramTotalGb = mi.totalMem / 1e9f,
         storageFreeGb = fs.availableBytes / 1e9f,
         storageTotalGb = fs.totalBytes / 1e9f,
