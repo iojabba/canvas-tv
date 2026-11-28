@@ -387,6 +387,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
         return added
     }
 
+    /** Adds app shortcut tiles for [pkgs] to the page named [pageName] (else the first page), skipping ones already there. */
+    fun addApps(pkgs: List<String>, pageName: String? = null): Int {
+        var added = 0
+        update { d ->
+            val idx = pageName?.let { n -> d.pages.indexOfFirst { it.name.equals(n, true) } }?.takeIf { it >= 0 } ?: 0
+            var p = d.pages.getOrNull(idx) ?: return@update d
+            val have = p.tiles.filter { it.type == TileType.APP }.map { it.cfg("pkg") }.toMutableSet()
+            for (pkg in pkgs.map { it.trim() }.filter { it.isNotBlank() }) {
+                if (pkg in have) continue
+                val spot = p.freeSpot(2, 1, d) ?: break
+                p = p.copy(tiles = p.tiles + Tile(type = TileType.APP, x = spot.first, y = spot.second, w = 2, h = 1, config = mapOf("pkg" to pkg)))
+                have += pkg; added++
+            }
+            d.copy(pages = d.pages.toMutableList().also { it[idx] = p })
+        }
+        return added
+    }
+
     override fun deleteTileFromWeb(pageIndex: Int, tileId: String): String? {
         val p = pageAt(pageIndex) ?: return "No such page"
         if (p.tiles.none { it.id == tileId }) return "That tile isn't on the page anymore"
@@ -432,7 +450,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app), CompanionApi
     fun launchApp(pkg: String): Boolean {
         val ok = Apps.launch(getApplication(), pkg)
         if (ok) update { d -> d.copy(apps = d.apps.copy(recent = (listOf(pkg) + d.apps.recent.filter { it != pkg }).take(20))) }
-        else message = "That app isn't installed anymore"
+        else message = if (Apps.openStore(getApplication(), pkg)) "That app isn't installed. Opening it in the Play Store." else "That app isn't installed"
         return ok
     }
 

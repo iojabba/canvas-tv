@@ -61,6 +61,11 @@ object Apps {
         }.getOrDefault(false)
     }
 
+    /** Opens the app's Play Store page so it can be installed. */
+    fun openStore(ctx: Context, pkg: String): Boolean = listOf("market://details?id=$pkg", "https://play.google.com/store/apps/details?id=$pkg").any { u ->
+        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false)
+    }
+
     fun isInstalled(ctx: Context, pkg: String) = runCatching {
         ctx.packageManager.getPackageInfo(pkg, 0); true
     }.getOrDefault(false)

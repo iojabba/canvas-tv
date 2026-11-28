@@ -64,6 +64,12 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra("showLinks"); intent.removeExtra("showTitles"); intent.removeExtra("showApps"); intent.removeExtra("showTvmaze")
             vm.message = "Added $n shows to the Shows page"
         }
+        // App shortcuts: --esa appPkgs <package>,<package>… [--es appPage <page name>]
+        intent?.getStringArrayExtra("appPkgs")?.let { pkgs ->
+            val n = vm.addApps(pkgs.toList(), intent.getStringExtra("appPage"))
+            intent.removeExtra("appPkgs"); intent.removeExtra("appPage")
+            vm.message = "Added $n app shortcuts"
+        }
         intent?.getStringExtra("overlayCity")?.let { city ->
             vm.setOverlay(vm.dashboard.overlay.copy(weatherPlace = city.trim()))
             intent.removeExtra("overlayCity")
